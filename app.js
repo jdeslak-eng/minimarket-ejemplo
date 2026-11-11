@@ -315,7 +315,7 @@ async function cargarHistorialVentas() {
     </tr>
   `;
 
-  // 💡 Apuntamos a la tabla 'sales' que es donde guardas tus ventas
+  // Traer las ventas de Supabase (tabla 'sales')
   const { data: ventas, error } = await supabaseClient
     .from('sales')
     .select('*')
@@ -347,9 +347,14 @@ async function cargarHistorialVentas() {
   ventas.forEach(venta => {
     totalAcumulado += Number(venta.total || 0);
 
-    const hora = new Date(venta.created_at).toLocaleTimeString('es-GT', {
+    // 💡 FORMATO COMPLETO: Día/Mes/Año, Hora:Minutos (ej. 11/11/2026, 02:45 PM)
+    const fechaCompleta = new Date(venta.created_at).toLocaleString('es-GT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: true
     });
 
     let itemsArray = venta.items;
@@ -364,7 +369,7 @@ async function cargarHistorialVentas() {
     tbody.innerHTML += `
       <tr class="border-b border-stone-100 text-xs">
         <td class="py-2.5 font-bold text-stone-800">#${venta.id}</td>
-        <td class="text-stone-500">${hora}</td>
+        <td class="text-stone-500">${fechaCompleta}</td>
         <td><span class="px-2 py-0.5 bg-stone-100 rounded text-[10px] font-medium uppercase">${venta.payment_method || 'Efectivo'}</span></td>
         <td class="text-stone-600">${resumenItems}</td>
         <td class="text-right font-extrabold text-stone-900">Q ${Number(venta.total).toFixed(2)}</td>
