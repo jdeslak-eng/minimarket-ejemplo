@@ -301,7 +301,7 @@ function setPaymentMethod(method) {
 }
 
 // ==========================================
-// CARGAR HISTORIAL DESDE SUPABASE (Tabla: sales)
+// HISTORIAL DETALLADO AGRUPADO POR FECHA (Día, Mes, Año)
 // ==========================================
 async function cargarHistorialVentas() {
   const tbody = document.getElementById('sales-table-body');
@@ -311,11 +311,11 @@ async function cargarHistorialVentas() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="5" class="text-center py-4 text-stone-500">Cargando historial...</td>
+      <td colspan="5" class="text-center py-4 text-stone-500">Cargando historial detallado...</td>
     </tr>
   `;
 
-  // Traer las ventas de Supabase (tabla 'sales')
+  // 1. Traer ventas de Supabase
   const { data: ventas, error } = await supabaseClient
     .from('sales')
     .select('*')
@@ -325,7 +325,7 @@ async function cargarHistorialVentas() {
     console.error('Error al obtener ventas:', error.message);
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="text-center py-4 text-red-500">Error al cargar historial</td>
+        <td colspan="5" class="text-center py-4 text-red-500">Error al cargar el historial</td>
       </tr>
     `;
     return;
@@ -341,44 +341,79 @@ async function cargarHistorialVentas() {
     return;
   }
 
-  tbody.innerHTML = '';
-  let totalAcumulado = 0;
+  // 2. Agrupar ventas por fecha (Día/Mes/Año)
+  const ventasAgrupadasPorFecha = {};
+  let totalGlobalAcumulado = 0;
 
   ventas.forEach(venta => {
-    totalAcumulado += Number(venta.total || 0);
+    const monto = Number(venta.total || 0);
+    totalGlobalAcumulado += monto;
 
-    // 💡 FORMATO COMPLETO: Día/Mes/Año, Hora:Minutos (ej. 11/11/2026, 02:45 PM)
-    const fechaCompleta = new Date(venta.created_at).toLocaleString('es-GT', {
+    const fechaObj = new Date(venta.created_at);
+    
+    // Llaves para agrupar (Ej: "11/11/2026")
+    const fechaKey = fechaObj.toLocaleDateString('es-GT', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
+      year: 'numeric'
     });
 
-    let itemsArray = venta.items;
-    if (typeof itemsArray === 'string') {
-      try { itemsArray = JSON.parse(itemsArray); } catch (e) { itemsArray = []; }
+    if (!ventasAgrupadasPorFecha[fechaKey]) {
+      ventasAgrupadasPorFecha[fechaKey] = {
+        fecha: fechaKey,
+        ventasDelDia: [],
+        totalDia: 0
+      };
     }
 
-    const resumenItems = Array.isArray(itemsArray)
-      ? itemsArray.map(p => `${p.name || p.nombre || 'Producto'} (${p.quantity || p.cantidad || 1})`).join(', ')
-      : 'Sin detalle';
-
-    tbody.innerHTML += `
-      <tr class="border-b border-stone-100 text-xs">
-        <td class="py-2.5 font-bold text-stone-800">#${venta.id}</td>
-        <td class="text-stone-500">${fechaCompleta}</td>
-        <td><span class="px-2 py-0.5 bg-stone-100 rounded text-[10px] font-medium uppercase">${venta.payment_method || 'Efectivo'}</span></td>
-        <td class="text-stone-600">${resumenItems}</td>
-        <td class="text-right font-extrabold text-stone-900">Q ${Number(venta.total).toFixed(2)}</td>
-      </tr>
-    `;
+    ventasAgrupadasPorFecha[fechaKey].ventasDelDia.push(venta);
+    ventasAgrupadasPorFecha[fechaKey].totalDia += monto;
   });
 
+  // 3. Renderizar en la tabla por bloques de fecha
+  tbody.innerHTML = '';
+
+  Object.values(ventasAgrupadasPorFecha).forEach(grupo => {
+    // Fila de Encabezado de la Fecha (Separador visual de Día / Mes / Año)
+    tbody.innerHTML += `
+      <tr class="bg-stone-100 font-bold text-stone-700">
+        <td colspan="4" class="py-2.5 px-3">📅 Fecha: ${grupo.fecha}</td>
+        <td class="py-2.5 px-3 text-right">Total Día: Q ${grupo.totalDia.toFixed(2)}</td>
+      </tr>
+    `;
+
+    // Listar cada venta individual de ese día
+    grupo.ventasDelDia.forEach(venta => {
+      const hora = new Date(venta.created_at).toLocaleTimeString('es-GT', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+
+      let itemsArray = venta.items;
+      if (typeof itemsArray === 'string') {
+        try { itemsArray = JSON.parse(itemsArray); } catch (e) { itemsArray = []; }
+      }
+
+      const resumenItems = Array.isArray(itemsArray)
+        ? itemsArray.map(p => `${p.name || p.nombre || 'Producto'} (${p.quantity || p.cantidad || 1})`).join(', ')
+        : 'Sin detalle';
+
+      tbody.innerHTML += `
+        <tr class="border-b border-stone-100 text-xs hover:bg-stone-50 transition">
+          <td class="py-2.5 pl-6 font-bold text-stone-800">#${venta.id}</td>
+          <td class="text-stone-500">${hora}</td>
+          <td><span class="px-2 py-0.5 bg-stone-100 rounded text-[10px] font-medium uppercase">${venta.payment_method || 'Efectivo'}</span></td>
+          <td class="text-stone-600">${resumenItems}</td>
+          <td class="text-right font-extrabold text-stone-900">Q ${Number(venta.total).toFixed(2)}</td>
+        </tr>
+      `;
+    });
+  });
+
+  // 4. Actualizar el Total Global en la tarjeta superior
   if (totalDayEl) {
-    totalDayEl.textContent = `Q ${totalAcumulado.toFixed(2)}`;
+    totalDayEl.textContent = `Q ${totalGlobalAcumulado.toFixed(2)}`;
   }
 }
 
