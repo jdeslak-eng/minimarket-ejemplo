@@ -984,3 +984,63 @@ window.startNewDay = async function() {
     window.location.href = window.location.pathname;
   }
 };
+
+// ==========================================
+// MÓDULO DE TEMA (CLARO / OSCURO / SISTEMA)
+// ==========================================
+function applyTheme(theme) {
+  const root = document.documentElement;
+  const icon = document.getElementById('theme-icon');
+  const text = document.getElementById('theme-text');
+
+  if (theme === 'dark') {
+    root.classList.add('dark');
+    if (icon) icon.className = 'fa-solid fa-moon text-indigo-400';
+    if (text) text.innerText = 'Oscuro';
+    localStorage.setItem('pos_theme', 'dark');
+  } else if (theme === 'light') {
+    root.classList.remove('dark');
+    if (icon) icon.className = 'fa-solid fa-sun text-amber-500';
+    if (text) text.innerText = 'Claro';
+    localStorage.setItem('pos_theme', 'light');
+  } else {
+    // Modo Automático (según el sistema)
+    localStorage.removeItem('pos_theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (systemPrefersDark) {
+      root.classList.add('dark');
+      if (icon) icon.className = 'fa-solid fa-laptop text-stone-400';
+      if (text) text.innerText = 'Auto (Oscuro)';
+    } else {
+      root.classList.remove('dark');
+      if (icon) icon.className = 'fa-solid fa-laptop text-stone-600';
+      if (text) text.innerText = 'Auto (Claro)';
+    }
+  }
+}
+
+// Alternar entre los 3 estados al hacer clic en el botón
+window.toggleTheme = function() {
+  const currentTheme = localStorage.getItem('pos_theme');
+  
+  if (!currentTheme) {
+    // Si estaba en Auto, pasa a Oscuro
+    applyTheme('dark');
+  } else if (currentTheme === 'dark') {
+    // Si estaba en Oscuro, pasa a Claro
+    applyTheme('light');
+  } else {
+    // Si estaba en Claro, regresa a Automático (Sistema)
+    applyTheme('auto');
+  }
+};
+
+// Cargar el tema guardado al iniciar la página (colócalo también dentro del DOMContentLoaded o al inicio)
+(function initTheme() {
+  const savedTheme = localStorage.getItem('pos_theme');
+  if (savedTheme) {
+    applyTheme(savedTheme);
+  } else {
+    applyTheme('auto');
+  }
+})();
