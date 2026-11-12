@@ -26,15 +26,57 @@ let barcodeTimer = null;
 let currentSaleDetails = null;
 
 // ==========================================
-// INICIALIZACIÓN AL CARGAR LA PÁGINA
+// INICIALIZACIÓN Y CONTROL DE AUTENTICACIÓN
 // ==========================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Verificar si hay sesión activa en Supabase
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const loginContainer = document.getElementById('login-container');
+  
+  if (!session) {
+    if (loginContainer) loginContainer.style.display = 'flex';
+    return; // Detenemos la carga si no hay sesión para bloquear el POS por detrás
+  } else {
+    if (loginContainer) loginContainer.style.display = 'none';
+  }
+
+  // 2. Si sí hay sesión, cargamos todo el sistema normalmente
   loadProductsFromSupabase();
   setupBarcodeScanner();
   renderCart();
   cargarHistorialVentas();
   setupSupabaseRealtime();
+  setupGlobalCorteListener(); 
 });
+
+// ==========================================
+// MANEJO DE INICIO DE SESIÓN
+// ==========================================
+window.handleLogin = async function(event) {
+  event.preventDefault();
+  
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const errorDiv = document.getElementById('login-error');
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: password,
+  });
+
+  if (error) {
+    if (errorDiv) {
+      errorDiv.innerText = "⚠️ Correo o contraseña incorrectos.";
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
+
+  const loginContainer = document.getElementById('login-container');
+  if (loginContainer) loginContainer.style.display = 'none';
+  
+  window.location.reload();
+};
 
 // ==========================================
 // SINCRONIZACIÓN CON SUPABASE (NUBE / WI-FI)
@@ -506,11 +548,9 @@ window.processSale = async function() {
     return;
   }
 
-  // 0. Obtener el correo del usuario/cajero logueado actualmente
   const { data: { user } } = await supabaseClient.auth.getUser();
   const userEmail = user ? user.email : 'desconocido';
 
-  // 1. Descontar stock en Supabase
   for (const item of currentCart) {
     const stockActual = Number(item.stock) || 0;
     const cantidadVendida = Number(item.quantity || 1);
@@ -524,7 +564,6 @@ window.processSale = async function() {
     if (error) console.error(`Error al actualizar stock de ${item.name}:`, error);
   }
 
-  // 2. Registrar venta en Supabase (tabla 'sales') con el user_email incluido
   const { data: insertedSale, error: saleError } = await supabaseClient
     .from('sales')
     .insert([{ 
@@ -541,7 +580,6 @@ window.processSale = async function() {
     return;
   }
 
-  // 3. Preparar datos del ticket
   const saleDetails = {
     id: insertedSale && insertedSale[0] ? insertedSale[0].id : Math.floor(1000 + Math.random() * 9000),
     fecha: new Date().toLocaleString('es-GT'),
@@ -553,20 +591,16 @@ window.processSale = async function() {
     cajero: userEmail
   };
 
-  // 4. Vaciar carrito local
   cart = [];
   saveCartState();
   renderCart();
   
-  // 5. Cerrar modal de pago
   const modalPayment = document.getElementById('modal-payment');
   if (modalPayment) modalPayment.classList.add('hidden');
 
-  // 6. Actualizar inventario e historial en pantalla
   await loadProductsFromSupabase();
   await cargarHistorialVentas();
 
-  // 7. ABRIR EL MODAL DEL TICKET
   if (typeof renderAndShowTicket === 'function') {
     renderAndShowTicket(saleDetails);
   } else {
@@ -575,7 +609,7 @@ window.processSale = async function() {
 };
 
 // ==========================================
-// SUPABASE REALTIME & GESTIÓN DE PRODUCTOS
+// SUPABASE REALTIME & CANALES EN TIEMPO REAL
 // ==========================================
 function setupSupabaseRealtime() {
   if (typeof supabaseClient === 'undefined') return;
@@ -591,6 +625,20 @@ function setupSupabaseRealtime() {
         }
       }
     )
+    .subscribe();
+}
+
+function setupGlobalCorteListener() {
+  if (typeof supabaseClient === 'undefined') return;
+
+  supabaseClient
+    .channel('corte-global-channel')
+    .on('broadcast', { event: 'trigger_corte' }, () => {
+      alert("⚠️ Se ha realizado un Corte de Caja en otra terminal. La sesión se cerrará por seguridad.");
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = window.location.pathname;
+    })
     .subscribe();
 }
 
@@ -736,9 +784,6 @@ function closeTicketModal() {
   if (modalTicket) modalTicket.classList.add('hidden');
 }
 
-// ==========================================
-// REIMPRIMIR TICKET DESDE EL HISTORIAL
-// ==========================================
 window.reimprimirTicket = function(venta) {
   let itemsArray = venta.items;
   if (typeof itemsArray === 'string') {
@@ -764,9 +809,6 @@ window.reimprimirTicket = function(venta) {
   }
 };
 
-// ==========================================
-// MÓDULO DE DEVOLUCIÓN Y ANULACIÓN DE VENTAS
-// ==========================================
 window.procesarDevolucion = async function(ventaId) {
   if (!confirm(`⚠️ ¿Estás seguro de realizar la DEVOLUCIÓN de la venta #${ventaId}?\n\nEsto devolverá los productos al inventario y eliminará el registro de la venta.`)) {
     return;
@@ -825,9 +867,6 @@ window.procesarDevolucion = async function(ventaId) {
   }
 };
 
-// ==========================================
-// FUNCIONES ADICIONALES (PRODUCTO MANUAL)
-// ==========================================
 window.openCustomItemModal = function() {
   const nombre = prompt("Nombre del producto o servicio libre:");
   if (!nombre || nombre.trim() === "") return;
@@ -852,9 +891,6 @@ window.openCustomItemModal = function() {
   renderCart();
 };
 
-// ==========================================
-// MÓDULO DE CORTE DE CAJA / INGRESOS
-// ==========================================
 async function updateCashCutView() {
   const efectivoEl = document.getElementById('cash-sales-total');
   const tarjetaEl = document.getElementById('digital-sales-total');
@@ -920,7 +956,7 @@ window.startNewDay = async function() {
       }
     }
 
-    // NUEVO: Emitir señal de cierre a todas las demás terminales conectadas
+    // Emitir señal en tiempo real a todas las demás terminales
     const channel = supabaseClient.channel('corte-global-channel');
     await channel.subscribe();
     await channel.send({
@@ -947,62 +983,4 @@ window.startNewDay = async function() {
     
     window.location.href = window.location.pathname;
   }
-};
-
-// ==========================================
-// CONTROL DE AUTENTICACIÓN (LOGIN / LOGOUT)
-// ==========================================
-
-// ==========================================
-// INICIALIZACIÓN Y CONTROL DE AUTENTICACIÓN
-// ==========================================
-document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Verificar si hay sesión activa en Supabase
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  const loginContainer = document.getElementById('login-container');
-  
-  if (!session) {
-    if (loginContainer) loginContainer.style.display = 'flex';
-    return; // Detenemos la carga si no hay sesión para que no cargue el POS por detrás
-  } else {
-    if (loginContainer) loginContainer.style.display = 'none';
-  }
-
-  // 2. Si sí hay sesión, cargamos todo el sistema normalmente
-  loadProductsFromSupabase();
-  setupBarcodeScanner();
-  renderCart();
-  cargarHistorialVentas();
-  setupSupabaseRealtime();
-  setupGlobalCorteListener(); // El canal en tiempo real para el cierre global
-});
-
-// ==========================================
-// MANEJO DE INICIO DE SESIÓN
-// ==========================================
-window.handleLogin = async function(event) {
-  event.preventDefault();
-  
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const errorDiv = document.getElementById('login-error');
-
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email: email,
-    password: password,
-  });
-
-  if (error) {
-    if (errorDiv) {
-      errorDiv.innerText = "⚠️ Correo o contraseña incorrectos.";
-      errorDiv.classList.remove('hidden');
-    }
-    return;
-  }
-
-  // Si el login es exitoso, ocultamos el modal y recargamos la página
-  const loginContainer = document.getElementById('login-container');
-  if (loginContainer) loginContainer.style.display = 'none';
-  
-  window.location.reload();
 };
