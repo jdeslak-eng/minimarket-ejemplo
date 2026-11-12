@@ -318,11 +318,7 @@ document.addEventListener('input', (e) => {
   }
 });
 
-function closePaymentModal() {
-  document.getElementById('modal-payment').classList.add('hidden');
-}
-
-function setPaymentMethod(method) {
+window.setPaymentMethod = function(method) {
   selectedPaymentMethod = method;
   document.querySelectorAll('.pay-method-btn').forEach(btn => btn.classList.remove('active'));
   const btnEl = document.getElementById(`pay-${method}`);
@@ -336,10 +332,10 @@ function setPaymentMethod(method) {
       calc.classList.add('hidden');
     }
   }
-}
+};
 
 // ==========================================
-// HISTORIAL DETALLADO AGRUPADO POR FECHA CON OPCIÓN DE DEVOLUCIÓN Y USUARIO
+// HISTORIAL DETALLADO AGRUPADO POR FECHA
 // ==========================================
 async function cargarHistorialVentas() {
   const tbody = document.getElementById('sales-table-body');
@@ -459,6 +455,34 @@ async function cargarHistorialVentas() {
   }
 }
 
+// ==========================================
+// MÓDULO DE COBRO GLOBAL Y SEGURO (UNIFICADO)
+// ==========================================
+window.openPaymentModal = function() {
+  if (typeof cart === 'undefined' || cart.length === 0) {
+    alert("El carrito está vacío. Agrega productos antes de cobrar.");
+    return;
+  }
+
+  const total = cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+  
+  const modalPayment = document.getElementById('modal-payment');
+  const totalPayElement = document.getElementById('modal-total-pay');
+  const payInput = document.getElementById('pay-amount-input');
+  const changeText = document.getElementById('pay-change-text');
+
+  if (!modalPayment) {
+    alert("⚠️ Falta agregar el HTML del modal de pago en tu index.html.");
+    return;
+  }
+
+  if (totalPayElement) totalPayElement.innerText = `Q${total.toFixed(2)}`;
+  if (payInput) payInput.value = '';
+  if (changeText) changeText.innerText = 'Q0.00';
+  
+  modalPayment.classList.remove('hidden');
+};
+
 window.closePaymentModal = function() {
   const modalPayment = document.getElementById('modal-payment');
   if (modalPayment) modalPayment.classList.add('hidden');
@@ -507,7 +531,7 @@ window.processSale = async function() {
       total: total, 
       payment_method: selectedPaymentMethod || 'Efectivo', 
       items: currentCart,
-      user_email: userEmail // <--- Aquí guardamos qué cajero hizo esta venta
+      user_email: userEmail 
     }])
     .select();
 
@@ -526,7 +550,7 @@ window.processSale = async function() {
     pago: payAmount,
     cambio: cambio,
     metodo: selectedPaymentMethod || 'Efectivo',
-    cajero: userEmail // Opcional para mostrar en el ticket si gustas
+    cajero: userEmail
   };
 
   // 4. Vaciar carrito local
@@ -748,7 +772,6 @@ window.procesarDevolucion = async function(ventaId) {
     return;
   }
 
-  // 1. Obtener la venta específica desde Supabase para conocer sus ítems
   const { data: ventaData, error: fetchError } = await supabaseClient
     .from('sales')
     .select('*')
@@ -765,13 +788,11 @@ window.procesarDevolucion = async function(ventaId) {
     try { itemsArray = JSON.parse(itemsArray); } catch (e) { itemsArray = []; }
   }
 
-  // 2. Devolver el stock a cada producto en la base de datos
   if (Array.isArray(itemsArray)) {
     for (const item of itemsArray) {
       const prodId = item.id;
       const cantidadDevuelta = Number(item.quantity || item.cantidad || 1);
 
-      // Consultar el stock actual del producto
       const { data: prodData, error: prodError } = await supabaseClient
         .from('products')
         .select('stock')
@@ -782,7 +803,6 @@ window.procesarDevolucion = async function(ventaId) {
         const stockActual = Number(prodData.stock || 0);
         const nuevoStock = stockActual + cantidadDevuelta;
 
-        // Actualizar con el stock sumado
         await supabaseClient
           .from('products')
           .update({ stock: nuevoStock })
@@ -791,7 +811,6 @@ window.procesarDevolucion = async function(ventaId) {
     }
   }
 
-  // 3. Eliminar el registro de la venta de la tabla 'sales'
   const { error: deleteError } = await supabaseClient
     .from('sales')
     .delete()
@@ -801,18 +820,14 @@ window.procesarDevolucion = async function(ventaId) {
     alert("⚠️ Hubo un error al eliminar la venta de la base de datos.");
   } else {
     alert(`✅ ¡Devolución de la venta #${ventaId} procesada con éxito!\nEl inventario ha sido restaurado.`);
-    
-    // 4. Refrescar la pantalla de inventario e historial
     await loadProductsFromSupabase();
     await cargarHistorialVentas();
   }
 };
 
 // ==========================================
-// FUNCIONES ADICIONALES (PRODUCTO MANUAL Y CORTE / NUEVO DÍA)
+// FUNCIONES ADICIONALES (PRODUCTO MANUAL)
 // ==========================================
-
-// 1. Abrir modal para agregar un ítem o producto personalizado/libre
 window.openCustomItemModal = function() {
   const nombre = prompt("Nombre del producto o servicio libre:");
   if (!nombre || nombre.trim() === "") return;
@@ -825,60 +840,16 @@ window.openCustomItemModal = function() {
     return;
   }
 
-  // Agregarlo directamente al carrito como un ítem temporal
   cart.push({
     id: 'custom_' + Date.now(),
     name: nombre.trim(),
     price: precio,
-    stock: 9999, // Stock ilimitado para ítems libres
+    stock: 9999,
     quantity: 1
   });
 
   saveCartState();
   renderCart();
-};
-
-// ==========================================
-// REINICIAR Y GUARDAR CIERRE (NUEVO DÍA + CIERRE DE SESIÓN)
-// ==========================================
-window.startNewDay = async function() {
-  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión por seguridad.")) {
-    return;
-  }
-
-  try {
-    // 1. Obtener todas las ventas actuales de Supabase
-    const { data: ventasActuales, error: fetchError } = await supabaseClient
-      .from('sales')
-      .select('id');
-
-    if (fetchError) {
-      alert("❌ Error al consultar las ventas para el corte.");
-      return;
-    }
-
-    if (ventasActuales && ventasActuales.length > 0) {
-      // 2. Eliminar los registros de la tabla sales para vaciar el día
-      for (const venta of ventasActuales) {
-        await supabaseClient
-          .from('sales')
-          .delete()
-          .eq('id', venta.id);
-      }
-    }
-
-    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión.");
-
-    // 3. Cerrar la sesión en Supabase para forzar el Login nuevamente
-    await supabaseClient.auth.signOut();
-
-    // 4. Recargar la página para que aparezca la pantalla de inicio de sesión obligatoria
-    location.reload();
-
-  } catch (err) {
-    console.error("Error en startNewDay:", err);
-    alert("⚠️ Hubo un error al procesar el cierre de caja.");
-  }
 };
 
 // ==========================================
@@ -889,7 +860,6 @@ async function updateCashCutView() {
   const tarjetaEl = document.getElementById('digital-sales-total');
   const totalEl = document.getElementById('overall-sales-total');
 
-  // Consultar todas las ventas desde Supabase
   const { data: ventas, error } = await supabaseClient
     .from('sales')
     .select('*');
@@ -907,7 +877,6 @@ async function updateCashCutView() {
       const monto = Number(venta.total || 0);
       const metodo = (venta.payment_method || 'cash').toLowerCase();
 
-      // Clasificar según el método de pago registrado
       if (metodo.includes('efectivo') || metodo === 'cash') {
         totalEfectivo += monto;
       } else {
@@ -918,19 +887,20 @@ async function updateCashCutView() {
 
   const totalGeneral = totalEfectivo + totalTarjeta;
 
-  // Actualizar los textos en pantalla usando los IDs correctos de tu HTML
   if (efectivoEl) efectivoEl.innerText = `Q ${totalEfectivo.toFixed(2)}`;
   if (tarjetaEl) tarjetaEl.innerText = `Q ${totalTarjeta.toFixed(2)}`;
   if (totalEl) totalEl.innerText = `Q ${totalGeneral.toFixed(2)}`;
 }
 
+// ==========================================
+// REINICIAR Y GUARDAR CIERRE (NUEVO DÍA + CIERRE GLOBAL)
+// ==========================================
 window.startNewDay = async function() {
-  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión por seguridad.")) {
+  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión globalmente por seguridad.")) {
     return;
   }
 
   try {
-    // 1. Obtener todas las ventas actuales
     const { data: ventasActuales, error: fetchError } = await supabaseClient
       .from('sales')
       .select('id');
@@ -941,7 +911,6 @@ window.startNewDay = async function() {
       return;
     }
 
-    // 2. Eliminar los registros de la tabla sales
     if (ventasActuales && ventasActuales.length > 0) {
       for (const venta of ventasActuales) {
         await supabaseClient
@@ -951,72 +920,15 @@ window.startNewDay = async function() {
       }
     }
 
-    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión.");
+    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión en todas partes.");
 
- } catch (err) {
+  } catch (err) {
     console.error("Error en startNewDay:", err);
   } finally {
-    // 3. Cierre de sesión GLOBAL: Invalida el usuario en TODOS los dispositivos a la vez
+    // Cierre global para desconectar todas las terminales que usen la misma cuenta
     await supabaseClient.auth.signOut({ scope: 'global' });
     localStorage.clear();
     sessionStorage.clear();
-    
-    // 4. Recargar la página
     window.location.reload(true);
   }
 };
-
-// ==========================================
-// AUTENTICACIÓN SEGURA CON SUPABASE AUTH
-// ==========================================
-
-// 1. Verificar si hay una sesión activa al cargar la página
-async function checkAuthSession() {
-  const loginContainer = document.getElementById('login-container');
-  if (!loginContainer) return;
-
-  const { data: { session }, error } = await supabaseClient.auth.getSession();
-  
-  if (session) {
-    // Si hay sesión, ocultar el login
-    loginContainer.style.display = 'none';
-  } else {
-    // Si no hay sesión, mostrar la pantalla de login obligatoriamente
-    loginContainer.style.display = 'flex';
-  }
-}
-
-// 2. Procesar el inicio de sesión
-window.handleLogin = async function(event) {
-  event.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const errorEl = document.getElementById('login-error');
-
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email: email,
-    password: password,
-  });
-
-  if (error) {
-    errorEl.innerText = "❌ Correo o contraseña incorrectos.";
-    errorEl.classList.remove('hidden');
-    return;
-  }
-
-  // Inicio de sesión exitoso, recargar la app limpia
-  location.reload();
-};
-
-// 3. Cerrar sesión
-window.handleLogout = async function() {
-  if (confirm("⚠️ ¿Estás seguro de cerrar sesión en este dispositivo?")) {
-    await supabaseClient.auth.signOut();
-    location.reload();
-  }
-};
-
-// Ejecutar la verificación de seguridad apenas cargue el script
-document.addEventListener('DOMContentLoaded', () => {
-  checkAuthSession();
-});
