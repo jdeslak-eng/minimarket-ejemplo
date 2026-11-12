@@ -16,6 +16,32 @@
 </head>
 <body class="pos-body">
 
+  <!-- Pantalla de Inicio de Sesión (Supabase Auth) -->
+  <div id="login-container" class="fixed inset-0 bg-stone-900 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 border border-stone-200">
+      <div class="text-center mb-6">
+        <h1 class="text-2xl font-extrabold text-stone-900">Minimarket POS</h1>
+        <p class="text-xs text-stone-500 mt-1">Ingresa tus credenciales para acceder al sistema</p>
+      </div>
+      
+      <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-stone-700 uppercase mb-1">Correo Electrónico</label>
+          <input type="email" id="login-email" required class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-stone-900 text-sm bg-stone-50">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-stone-700 uppercase mb-1">Contraseña</label>
+          <input type="password" id="login-password" required class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-stone-900 text-sm bg-stone-50">
+        </div>
+        <button type="submit" class="w-full bg-stone-900 hover:bg-stone-800 text-white py-3 rounded-xl font-bold text-sm transition shadow-md">
+          Iniciar Sesión
+        </button>
+      </form>
+
+      <div id="login-error" class="mt-4 text-center text-xs text-rose-600 hidden font-medium"></div>
+    </div>
+  </div>
+
   <!-- Header / Navegación principal -->
   <header class="pos-header no-print">
     <div class="pos-brand-container">

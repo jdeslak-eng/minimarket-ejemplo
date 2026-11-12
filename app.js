@@ -965,3 +965,58 @@ window.startNewDay = async function() {
     alert("⚠️ Hubo un error al procesar el cierre de caja.");
   }
 };
+
+// ==========================================
+// AUTENTICACIÓN SEGURA CON SUPABASE AUTH
+// ==========================================
+
+// 1. Verificar si hay una sesión activa al cargar la página
+async function checkAuthSession() {
+  const loginContainer = document.getElementById('login-container');
+  if (!loginContainer) return;
+
+  const { data: { session }, error } = await supabaseClient.auth.getSession();
+  
+  if (session) {
+    // Si hay sesión, ocultar el login
+    loginContainer.style.display = 'none';
+  } else {
+    // Si no hay sesión, mostrar la pantalla de login obligatoriamente
+    loginContainer.style.display = 'flex';
+  }
+}
+
+// 2. Procesar el inicio de sesión
+window.handleLogin = async function(event) {
+  event.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('login-error');
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: password,
+  });
+
+  if (error) {
+    errorEl.innerText = "❌ Correo o contraseña incorrectos.";
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  // Inicio de sesión exitoso, recargar la app limpia
+  location.reload();
+};
+
+// 3. Cerrar sesión
+window.handleLogout = async function() {
+  if (confirm("⚠️ ¿Estás seguro de cerrar sesión en este dispositivo?")) {
+    await supabaseClient.auth.signOut();
+    location.reload();
+  }
+};
+
+// Ejecutar la verificación de seguridad apenas cargue el script
+document.addEventListener('DOMContentLoaded', () => {
+  checkAuthSession();
+});
