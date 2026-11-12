@@ -896,7 +896,7 @@ async function updateCashCutView() {
 // REINICIAR Y GUARDAR CIERRE (NUEVO DÍA + CIERRE GLOBAL)
 // ==========================================
 window.startNewDay = async function() {
-  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión globalmente por seguridad.")) {
+  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión en TODAS las terminales.")) {
     return;
   }
 
@@ -920,32 +920,31 @@ window.startNewDay = async function() {
       }
     }
 
-    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión en todas partes.");
+    // NUEVO: Emitir señal de cierre a todas las demás terminales conectadas
+    const channel = supabaseClient.channel('corte-global-channel');
+    await channel.subscribe();
+    await channel.send({
+      type: 'broadcast',
+      event: 'trigger_corte',
+      payload: { timestamp: Date.now() }
+    });
+
+    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado y se cerrará la sesión en todas partes.");
 
   } catch (err) {
     console.error("Error en startNewDay:", err);
   } finally {
-    // 1. Cierre global en Supabase
     await supabaseClient.auth.signOut({ scope: 'global' });
-    
-    // 2. Limpiar todo rastro de almacenamiento local y de sesión
     localStorage.clear();
     sessionStorage.clear();
     
-    // 3. Borrar de forma segura cualquier clave relacionada con Supabase almacenada
     Object.keys(localStorage).forEach(key => {
-      if (key.includes('supabase')) {
-        localStorage.removeItem(key);
-      }
+      if (key.includes('supabase')) localStorage.removeItem(key);
     });
-    // Hacer lo mismo por si quedó algo en sessionStorage
     Object.keys(sessionStorage).forEach(key => {
-      if (key.includes('supabase')) {
-        sessionStorage.removeItem(key);
-      }
+      if (key.includes('supabase')) sessionStorage.removeItem(key);
     });
     
-    // 4. Recargar forzando la redirección limpia
     window.location.href = window.location.pathname;
   }
 };
@@ -954,19 +953,33 @@ window.startNewDay = async function() {
 // CONTROL DE AUTENTICACIÓN (LOGIN / LOGOUT)
 // ==========================================
 
-// 1. Comprobar sesión al cargar la página
+// ==========================================
+// INICIALIZACIÓN Y CONTROL DE AUTENTICACIÓN
+// ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Verificar si hay sesión activa en Supabase
   const { data: { session } } = await supabaseClient.auth.getSession();
   const loginContainer = document.getElementById('login-container');
   
   if (!session) {
     if (loginContainer) loginContainer.style.display = 'flex';
+    return; // Detenemos la carga si no hay sesión para que no cargue el POS por detrás
   } else {
     if (loginContainer) loginContainer.style.display = 'none';
   }
+
+  // 2. Si sí hay sesión, cargamos todo el sistema normalmente
+  loadProductsFromSupabase();
+  setupBarcodeScanner();
+  renderCart();
+  cargarHistorialVentas();
+  setupSupabaseRealtime();
+  setupGlobalCorteListener(); // El canal en tiempo real para el cierre global
 });
 
-// 2. Manejar el evento de inicio de sesión desde el formulario
+// ==========================================
+// MANEJO DE INICIO DE SESIÓN
+// ==========================================
 window.handleLogin = async function(event) {
   event.preventDefault();
   
@@ -987,7 +1000,7 @@ window.handleLogin = async function(event) {
     return;
   }
 
-  // Si el login es exitoso, ocultamos el modal de login y recargamos/inicializamos
+  // Si el login es exitoso, ocultamos el modal y recargamos la página
   const loginContainer = document.getElementById('login-container');
   if (loginContainer) loginContainer.style.display = 'none';
   
