@@ -339,7 +339,7 @@ function setPaymentMethod(method) {
 }
 
 // ==========================================
-// HISTORIAL DETALLADO AGRUPADO POR FECHA CON OPCIÓN DE DEVOLUCIÓN
+// HISTORIAL DETALLADO AGRUPADO POR FECHA CON OPCIÓN DE DEVOLUCIÓN Y USUARIO
 // ==========================================
 async function cargarHistorialVentas() {
   const tbody = document.getElementById('sales-table-body');
@@ -349,7 +349,7 @@ async function cargarHistorialVentas() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="6" class="text-center py-4 text-stone-500">Cargando historial detallado...</td>
+      <td colspan="7" class="text-center py-4 text-stone-500">Cargando historial detallado...</td>
     </tr>
   `;
 
@@ -362,7 +362,7 @@ async function cargarHistorialVentas() {
     console.error('Error al obtener ventas:', error.message);
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="text-center py-4 text-red-500">Error al cargar el historial</td>
+        <td colspan="7" class="text-center py-4 text-red-500">Error al cargar el historial</td>
       </tr>
     `;
     return;
@@ -371,7 +371,7 @@ async function cargarHistorialVentas() {
   if (!ventas || ventas.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="text-center py-4 text-stone-500">No hay ventas registradas todavía.</td>
+        <td colspan="7" class="text-center py-4 text-stone-500">No hay ventas registradas todavía.</td>
       </tr>
     `;
     if (totalDayEl) totalDayEl.textContent = 'Q 0.00';
@@ -409,7 +409,7 @@ async function cargarHistorialVentas() {
   Object.values(ventasAgrupadasPorFecha).forEach(grupo => {
     tbody.innerHTML += `
       <tr class="bg-stone-100 font-bold text-stone-700">
-        <td colspan="5" class="py-2.5 px-3">📅 Fecha: ${grupo.fecha}</td>
+        <td colspan="6" class="py-2.5 px-3">📅 Fecha: ${grupo.fecha}</td>
         <td class="py-2.5 px-3 text-right">Total Día: Q ${grupo.totalDia.toFixed(2)}</td>
       </tr>
     `;
@@ -431,11 +431,13 @@ async function cargarHistorialVentas() {
         : 'Sin detalle';
 
       const ventaJson = JSON.stringify(venta).replace(/"/g, '"');
+      const cajeroEmail = venta.user_email || 'General';
 
       tbody.innerHTML += `
         <tr class="border-b border-stone-100 text-xs hover:bg-stone-50 transition">
           <td class="py-2.5 pl-6 font-bold text-stone-800">#${venta.id}</td>
           <td class="text-stone-500">${hora}</td>
+          <td><span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">${cajeroEmail}</span></td>
           <td><span class="px-2 py-0.5 bg-stone-100 rounded text-[10px] font-medium uppercase">${venta.payment_method || 'Efectivo'}</span></td>
           <td class="text-stone-600">${resumenItems}</td>
           <td class="text-right font-extrabold text-stone-900">Q ${Number(venta.total).toFixed(2)}</td>
@@ -456,35 +458,6 @@ async function cargarHistorialVentas() {
     totalDayEl.textContent = `Q ${totalGlobalAcumulado.toFixed(2)}`;
   }
 }
-
-
-// ==========================================
-// MÓDULO DE COBRO GLOBAL Y SEGURO (UNIFICADO)
-// ==========================================
-window.openPaymentModal = function() {
-  if (typeof cart === 'undefined' || cart.length === 0) {
-    alert("El carrito está vacío. Agrega productos antes de cobrar.");
-    return;
-  }
-
-  const total = cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
-  
-  const modalPayment = document.getElementById('modal-payment');
-  const totalPayElement = document.getElementById('modal-total-pay');
-  const payInput = document.getElementById('pay-amount-input');
-  const changeText = document.getElementById('pay-change-text');
-
-  if (!modalPayment) {
-    alert("⚠️ Falta agregar el HTML del modal de pago en tu index.html.");
-    return;
-  }
-
-  if (totalPayElement) totalPayElement.innerText = `Q${total.toFixed(2)}`;
-  if (payInput) payInput.value = '';
-  if (changeText) changeText.innerText = 'Q0.00';
-  
-  modalPayment.classList.remove('hidden');
-};
 
 window.closePaymentModal = function() {
   const modalPayment = document.getElementById('modal-payment');
@@ -509,6 +482,10 @@ window.processSale = async function() {
     return;
   }
 
+  // 0. Obtener el correo del usuario/cajero logueado actualmente
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  const userEmail = user ? user.email : 'desconocido';
+
   // 1. Descontar stock en Supabase
   for (const item of currentCart) {
     const stockActual = Number(item.stock) || 0;
@@ -523,13 +500,14 @@ window.processSale = async function() {
     if (error) console.error(`Error al actualizar stock de ${item.name}:`, error);
   }
 
-  // 2. Registrar venta en Supabase (tabla 'sales')
+  // 2. Registrar venta en Supabase (tabla 'sales') con el user_email incluido
   const { data: insertedSale, error: saleError } = await supabaseClient
     .from('sales')
     .insert([{ 
       total: total, 
       payment_method: selectedPaymentMethod || 'Efectivo', 
-      items: currentCart 
+      items: currentCart,
+      user_email: userEmail // <--- Aquí guardamos qué cajero hizo esta venta
     }])
     .select();
 
@@ -547,7 +525,8 @@ window.processSale = async function() {
     total: total,
     pago: payAmount,
     cambio: cambio,
-    metodo: selectedPaymentMethod || 'Efectivo'
+    metodo: selectedPaymentMethod || 'Efectivo',
+    cajero: userEmail // Opcional para mostrar en el ticket si gustas
   };
 
   // 4. Vaciar carrito local
@@ -974,15 +953,15 @@ window.startNewDay = async function() {
 
     alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión.");
 
-  } catch (err) {
+ } catch (err) {
     console.error("Error en startNewDay:", err);
   } finally {
-    // 3. Cerrar sesión pase lo que pase y limpiar tokens locales
-    await supabaseClient.auth.signOut();
+    // 3. Cierre de sesión GLOBAL: Invalida el usuario en TODOS los dispositivos a la vez
+    await supabaseClient.auth.signOut({ scope: 'global' });
     localStorage.clear();
     sessionStorage.clear();
     
-    // 4. Recargar forzosamente desde el servidor
+    // 4. Recargar la página
     window.location.reload(true);
   }
 };
