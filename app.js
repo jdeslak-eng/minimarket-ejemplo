@@ -10,11 +10,12 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // VARIABLES GLOBALES DEL SISTEMA
 // ==========================================
 let products = [];
-let cart = JSON.parse(localStorage.getItem('caminoB_cart')) || [];
+let cart = JSON.parse(localStorage.getItem('pos_cart')) || [];
 
-function saveCartToStorage() {
-  localStorage.setItem('caminoB_cart', JSON.stringify(cart));
+function saveCartState() {
+  localStorage.setItem('pos_cart', JSON.stringify(cart));
 }
+
 let salesHistory = JSON.parse(localStorage.getItem('pos_sales')) || [];
 let cashCutHistory = JSON.parse(localStorage.getItem('pos_cash_cuts')) || [];
 
@@ -31,8 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
   loadProductsFromSupabase();
   setupBarcodeScanner();
   renderCart();
-  renderSales();
-  renderCashHistory();
+  cargarHistorialVentas();
+  setupSupabaseRealtime();
 });
 
 // ==========================================
@@ -85,7 +86,7 @@ function processBarcodeScan(code) {
 }
 
 // ==========================================
-// GESTIÓN DEL CARRITO
+// GESTIÓN DEL CARRITO (CON EDICIÓN DE CANTIDAD)
 // ==========================================
 function addToCart(productId) {
   const product = products.find(p => p.id === productId);
@@ -96,7 +97,7 @@ function addToCart(productId) {
     return;
   }
 
-  const existingItem = cart.find(item => item.id === productId);
+  const existingItem = cart.find(item => String(item.id) === String(productId));
   if (existingItem) {
     if (existingItem.quantity < product.stock) {
       existingItem.quantity++;
@@ -117,10 +118,6 @@ function addToCart(productId) {
   renderCart();
 }
 
-function saveCartState() {
-  localStorage.setItem('pos_cart', JSON.stringify(cart));
-}
-
 function renderCart() {
   const container = document.getElementById('cart-items');
   if (!container) return;
@@ -137,28 +134,67 @@ function renderCart() {
     if (btnPay) btnPay.removeAttribute('disabled');
     
     cart.forEach(item => {
-      subtotal += item.price * item.quantity;
+      const itemSubtotal = item.price * item.quantity;
+      subtotal += itemSubtotal;
+
       container.innerHTML += `
-        <div class="flex justify-between items-center py-2 border-b border-stone-100 text-xs">
-          <div>
-            <p class="font-bold text-stone-800">${item.name}</p>
-            <p class="text-stone-500">Q ${item.price.toFixed(2)} x ${item.quantity}</p>
+        <div class="flex justify-between items-center py-2.5 border-b border-stone-100 text-xs">
+          <div class="flex-1 pr-2">
+            <p class="font-bold text-stone-800 line-clamp-1">${item.name}</p>
+            <p class="text-stone-500">Q ${item.price.toFixed(2)} c/u</p>
           </div>
+
+          <!-- CONTROLES DE CANTIDAD (- / INPUT / +) -->
+          <div class="flex items-center gap-1 mr-3">
+            <button onclick="updateCartQuantity('${item.id}', ${item.quantity - 1})" class="w-6 h-6 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold flex items-center justify-center transition">-</button>
+            
+            <input type="number" min="1" max="${item.stock}" value="${item.quantity}" 
+              onchange="updateCartQuantity('${item.id}', this.value)"
+              class="w-12 text-center font-bold border border-stone-300 rounded py-0.5 text-xs focus:outline-none focus:border-stone-900">
+            
+            <button onclick="updateCartQuantity('${item.id}', ${item.quantity + 1})" class="w-6 h-6 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold flex items-center justify-center transition">+</button>
+          </div>
+
+          <!-- SUBTOTAL Y BOTÓN ELIMINAR -->
           <div class="flex items-center gap-2">
-            <span class="font-bold text-stone-900">Q ${(item.price * item.quantity).toFixed(2)}</span>
-            <button onclick="removeFromCart(${item.id})" class="text-rose-500 hover:text-rose-700 px-1"><i class="fa-solid fa-trash"></i></button>
+            <span class="font-extrabold text-stone-900 w-16 text-right">Q ${itemSubtotal.toFixed(2)}</span>
+            <button onclick="removeFromCart('${item.id}')" class="text-rose-500 hover:text-rose-700 p-1"><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
       `;
     });
   }
 
-  document.getElementById('cart-subtotal').innerText = `Q ${subtotal.toFixed(2)}`;
-  document.getElementById('cart-total').innerText = `Q ${subtotal.toFixed(2)}`;
+  const subtotalEl = document.getElementById('cart-subtotal');
+  const totalEl = document.getElementById('cart-total');
+  if (subtotalEl) subtotalEl.innerText = `Q ${subtotal.toFixed(2)}`;
+  if (totalEl) totalEl.innerText = `Q ${subtotal.toFixed(2)}`;
 }
 
+window.updateCartQuantity = function(productId, newQty) {
+  const qty = parseInt(newQty);
+  const item = cart.find(i => String(i.id) === String(productId));
+  
+  if (!item) return;
+
+  if (isNaN(qty) || qty <= 0) {
+    removeFromCart(productId);
+    return;
+  }
+
+  if (qty > item.stock) {
+    alert(`Solo hay ${item.stock} unidades disponibles en stock.`);
+    item.quantity = item.stock;
+  } else {
+    item.quantity = qty;
+  }
+
+  saveCartState();
+  renderCart();
+};
+
 function removeFromCart(productId) {
-  cart = cart.filter(item => item.id !== productId);
+  cart = cart.filter(item => String(item.id) !== String(productId));
   saveCartState();
   renderCart();
 }
@@ -182,9 +218,8 @@ function switchTab(tabId) {
   if (targetView) targetView.classList.remove('hidden');
   if (targetBtn) targetBtn.classList.add('active');
 
-  if (tabId === 'cash') updateCashCutView();
+  if (tabId === 'cash' && typeof updateCashCutView === 'function') updateCashCutView();
   
-  // 💡 Si cambias a la pestaña de historial/ventas, cargamos desde Supabase
   if (tabId === 'sales') {
     cargarHistorialVentas();
   }
@@ -290,18 +325,21 @@ function closePaymentModal() {
 function setPaymentMethod(method) {
   selectedPaymentMethod = method;
   document.querySelectorAll('.pay-method-btn').forEach(btn => btn.classList.remove('active'));
-  document.getElementById(`pay-${method}`).classList.add('active');
+  const btnEl = document.getElementById(`pay-${method}`);
+  if (btnEl) btnEl.classList.add('active');
 
   const calc = document.getElementById('cash-calculator');
-  if (method === 'cash') {
-    calc.classList.remove('hidden');
-  } else {
-    calc.classList.add('hidden');
+  if (calc) {
+    if (method === 'cash') {
+      calc.classList.remove('hidden');
+    } else {
+      calc.classList.add('hidden');
+    }
   }
 }
 
 // ==========================================
-// HISTORIAL DETALLADO AGRUPADO POR FECHA (Día, Mes, Año)
+// HISTORIAL DETALLADO AGRUPADO POR FECHA CON OPCIÓN DE DEVOLUCIÓN
 // ==========================================
 async function cargarHistorialVentas() {
   const tbody = document.getElementById('sales-table-body');
@@ -311,11 +349,10 @@ async function cargarHistorialVentas() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="5" class="text-center py-4 text-stone-500">Cargando historial detallado...</td>
+      <td colspan="6" class="text-center py-4 text-stone-500">Cargando historial detallado...</td>
     </tr>
   `;
 
-  // 1. Traer ventas de Supabase
   const { data: ventas, error } = await supabaseClient
     .from('sales')
     .select('*')
@@ -325,7 +362,7 @@ async function cargarHistorialVentas() {
     console.error('Error al obtener ventas:', error.message);
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="text-center py-4 text-red-500">Error al cargar el historial</td>
+        <td colspan="6" class="text-center py-4 text-red-500">Error al cargar el historial</td>
       </tr>
     `;
     return;
@@ -334,14 +371,13 @@ async function cargarHistorialVentas() {
   if (!ventas || ventas.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="text-center py-4 text-stone-500">No hay ventas registradas todavía.</td>
+        <td colspan="6" class="text-center py-4 text-stone-500">No hay ventas registradas todavía.</td>
       </tr>
     `;
     if (totalDayEl) totalDayEl.textContent = 'Q 0.00';
     return;
   }
 
-  // 2. Agrupar ventas por fecha (Día/Mes/Año)
   const ventasAgrupadasPorFecha = {};
   let totalGlobalAcumulado = 0;
 
@@ -350,8 +386,6 @@ async function cargarHistorialVentas() {
     totalGlobalAcumulado += monto;
 
     const fechaObj = new Date(venta.created_at);
-    
-    // Llaves para agrupar (Ej: "11/11/2026")
     const fechaKey = fechaObj.toLocaleDateString('es-GT', {
       day: '2-digit',
       month: '2-digit',
@@ -370,19 +404,16 @@ async function cargarHistorialVentas() {
     ventasAgrupadasPorFecha[fechaKey].totalDia += monto;
   });
 
-  // 3. Renderizar en la tabla por bloques de fecha
   tbody.innerHTML = '';
 
   Object.values(ventasAgrupadasPorFecha).forEach(grupo => {
-    // Fila de Encabezado de la Fecha (Separador visual de Día / Mes / Año)
     tbody.innerHTML += `
       <tr class="bg-stone-100 font-bold text-stone-700">
-        <td colspan="4" class="py-2.5 px-3">📅 Fecha: ${grupo.fecha}</td>
+        <td colspan="5" class="py-2.5 px-3">📅 Fecha: ${grupo.fecha}</td>
         <td class="py-2.5 px-3 text-right">Total Día: Q ${grupo.totalDia.toFixed(2)}</td>
       </tr>
     `;
 
-    // Listar cada venta individual de ese día
     grupo.ventasDelDia.forEach(venta => {
       const hora = new Date(venta.created_at).toLocaleTimeString('es-GT', {
         hour: '2-digit',
@@ -399,6 +430,8 @@ async function cargarHistorialVentas() {
         ? itemsArray.map(p => `${p.name || p.nombre || 'Producto'} (${p.quantity || p.cantidad || 1})`).join(', ')
         : 'Sin detalle';
 
+      const ventaJson = JSON.stringify(venta).replace(/"/g, '"');
+
       tbody.innerHTML += `
         <tr class="border-b border-stone-100 text-xs hover:bg-stone-50 transition">
           <td class="py-2.5 pl-6 font-bold text-stone-800">#${venta.id}</td>
@@ -406,19 +439,27 @@ async function cargarHistorialVentas() {
           <td><span class="px-2 py-0.5 bg-stone-100 rounded text-[10px] font-medium uppercase">${venta.payment_method || 'Efectivo'}</span></td>
           <td class="text-stone-600">${resumenItems}</td>
           <td class="text-right font-extrabold text-stone-900">Q ${Number(venta.total).toFixed(2)}</td>
+          <td class="text-right pr-4 flex items-center justify-end gap-1.5 py-2.5">
+            <button onclick='reimprimirTicket(${ventaJson})' title="Reimprimir Ticket" class="bg-stone-800 hover:bg-stone-900 text-white px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1">
+              <i class="fa-solid fa-print"></i>
+            </button>
+            <button onclick="procesarDevolucion(${venta.id})" title="Devolución / Anular Venta" class="bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1">
+              <i class="fa-solid fa-rotate-left"></i> Dev.
+            </button>
+          </td>
         </tr>
       `;
     });
   });
 
-  // 4. Actualizar el Total Global en la tarjeta superior
   if (totalDayEl) {
     totalDayEl.textContent = `Q ${totalGlobalAcumulado.toFixed(2)}`;
   }
 }
 
+
 // ==========================================
-// MÓDULO DE COBRO GLOBAL Y SEGURO
+// MÓDULO DE COBRO GLOBAL Y SEGURO (UNIFICADO)
 // ==========================================
 window.openPaymentModal = function() {
   if (typeof cart === 'undefined' || cart.length === 0) {
@@ -461,6 +502,7 @@ window.processSale = async function() {
   
   const payInput = document.getElementById('pay-amount-input');
   const payAmount = (payInput && payInput.value !== '') ? parseFloat(payInput.value) : total;
+  const cambio = payAmount - total;
 
   if (payAmount < total) {
     alert("El monto ingresado es menor al total a pagar.");
@@ -470,25 +512,26 @@ window.processSale = async function() {
   // 1. Descontar stock en Supabase
   for (const item of currentCart) {
     const stockActual = Number(item.stock) || 0;
-    const cantidadVendida = Number(item.quantity) || 1;
+    const cantidadVendida = Number(item.quantity || 1);
     const nuevoStock = stockActual - cantidadVendida;
 
     const { error } = await supabaseClient
       .from('products')
-      .update({ stock: nuevoStock })
+      .update({ stock: Math.max(0, nuevoStock) })
       .eq('id', item.id);
 
     if (error) console.error(`Error al actualizar stock de ${item.name}:`, error);
   }
 
   // 2. Registrar venta en Supabase (tabla 'sales')
-  const { error: saleError } = await supabaseClient
+  const { data: insertedSale, error: saleError } = await supabaseClient
     .from('sales')
     .insert([{ 
       total: total, 
-      payment_method: selectedPaymentMethod || 'cash', 
+      payment_method: selectedPaymentMethod || 'Efectivo', 
       items: currentCart 
-    }]);
+    }])
+    .select();
 
   if (saleError) {
     console.error("Error al registrar la venta:", saleError);
@@ -496,19 +539,36 @@ window.processSale = async function() {
     return;
   }
 
-  // 3. Vaciar carrito
+  // 3. Preparar datos del ticket
+  const saleDetails = {
+    id: insertedSale && insertedSale[0] ? insertedSale[0].id : Math.floor(1000 + Math.random() * 9000),
+    fecha: new Date().toLocaleString('es-GT'),
+    items: [...currentCart],
+    total: total,
+    pago: payAmount,
+    cambio: cambio,
+    metodo: selectedPaymentMethod || 'Efectivo'
+  };
+
+  // 4. Vaciar carrito local
   cart = [];
   saveCartState();
   renderCart();
   
-  // 4. Cerrar modal y refrescar
+  // 5. Cerrar modal de pago
   const modalPayment = document.getElementById('modal-payment');
   if (modalPayment) modalPayment.classList.add('hidden');
 
+  // 6. Actualizar inventario e historial en pantalla
   await loadProductsFromSupabase();
-  cargarHistorialVentas();
+  await cargarHistorialVentas();
 
-  alert("✅ ¡Venta realizada con éxito, inventario actualizado y registrada en el historial!");
+  // 7. ABRIR EL MODAL DEL TICKET
+  if (typeof renderAndShowTicket === 'function') {
+    renderAndShowTicket(saleDetails);
+  } else {
+    alert(`✅ ¡Venta #${saleDetails.id} realizada con éxito!`);
+  }
 };
 
 // ==========================================
@@ -522,7 +582,7 @@ function setupSupabaseRealtime() {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'products' },
-      async (payload) => {
+      async () => {
         if (typeof loadProductsFromSupabase === 'function') {
           await loadProductsFromSupabase();
         }
@@ -530,10 +590,6 @@ function setupSupabaseRealtime() {
     )
     .subscribe();
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  setupSupabaseRealtime();
-});
 
 window.deleteProduct = async function(productId) {
   if (!confirm("¿Estás seguro de que deseas eliminar este producto del inventario?")) return;
@@ -608,5 +664,304 @@ window.saveEditedProduct = async function() {
     closeEditModal();
     await loadProductsFromSupabase();
     alert("✅ ¡Producto actualizado con éxito!");
+  }
+};
+
+// ==========================================
+// MÓDULO DE GENERACIÓN Y VISUALIZACIÓN DE TICKET
+// ==========================================
+function renderAndShowTicket(sale) {
+  const modalTicket = document.getElementById('modal-ticket');
+  const ticketContent = document.getElementById('ticket-content');
+
+  if (!modalTicket || !ticketContent) {
+    console.warn("⚠️ No se encontró el elemento modal-ticket en el HTML.");
+    return;
+  }
+
+  const itemsHtml = sale.items.map(item => {
+    const nombre = item.name || item.nombre || 'Producto';
+    const cant = item.quantity || item.cantidad || 1;
+    const precio = Number(item.price || item.precio || 0);
+    const subtotal = precio * cant;
+
+    return `
+      <div class="flex justify-between py-0.5">
+        <span>${nombre} x${cant}</span>
+        <span>Q ${subtotal.toFixed(2)}</span>
+      </div>
+    `;
+  }).join('');
+
+  ticketContent.innerHTML = `
+    <div class="text-center mb-3">
+      <h4 class="font-extrabold text-sm tracking-wider uppercase text-stone-900">minimarket</h4>
+      <p class="text-[10px] text-stone-500">supero 24 horas</p>
+      <p class="text-[10px] text-stone-400">${sale.fecha}</p>
+      <p class="text-[10px] font-bold text-stone-700 mt-1">Ticket #${sale.id}</p>
+    </div>
+
+    <div class="border-t border-b border-dashed border-stone-300 py-2 my-2">
+      ${itemsHtml}
+    </div>
+
+    <div class="space-y-1 font-bold text-stone-900 pt-1">
+      <div class="flex justify-between text-sm">
+        <span>TOTAL:</span>
+        <span>Q ${sale.total.toFixed(2)}</span>
+      </div>
+      <div class="flex justify-between text-[11px] font-normal text-stone-600">
+        <span>PAGADO:</span>
+        <span>Q ${sale.pago.toFixed(2)}</span>
+      </div>
+      <div class="flex justify-between text-[11px] font-normal text-stone-600">
+        <span>CAMBIO:</span>
+        <span>Q ${sale.cambio.toFixed(2)}</span>
+      </div>
+    </div>
+
+    <div class="text-center mt-4 pt-2 border-t border-dashed border-stone-300 text-[10px] text-stone-500">
+      <p>¡Gracias por su compra!</p>
+    </div>
+  `;
+
+  modalTicket.classList.remove('hidden');
+}
+
+function closeTicketModal() {
+  const modalTicket = document.getElementById('modal-ticket');
+  if (modalTicket) modalTicket.classList.add('hidden');
+}
+
+// ==========================================
+// REIMPRIMIR TICKET DESDE EL HISTORIAL
+// ==========================================
+window.reimprimirTicket = function(venta) {
+  let itemsArray = venta.items;
+  if (typeof itemsArray === 'string') {
+    try { itemsArray = JSON.parse(itemsArray); } catch (e) { itemsArray = []; }
+  }
+
+  const fechaFormateada = new Date(venta.created_at).toLocaleString('es-GT');
+
+  const saleDetails = {
+    id: venta.id,
+    fecha: fechaFormateada,
+    items: itemsArray,
+    total: Number(venta.total || 0),
+    pago: Number(venta.total || 0),
+    cambio: 0,
+    metodo: venta.payment_method || 'Efectivo'
+  };
+
+  if (typeof renderAndShowTicket === 'function') {
+    renderAndShowTicket(saleDetails);
+  } else {
+    alert("⚠️ El módulo de visualización de tickets no está disponible.");
+  }
+};
+
+// ==========================================
+// MÓDULO DE DEVOLUCIÓN Y ANULACIÓN DE VENTAS
+// ==========================================
+window.procesarDevolucion = async function(ventaId) {
+  if (!confirm(`⚠️ ¿Estás seguro de realizar la DEVOLUCIÓN de la venta #${ventaId}?\n\nEsto devolverá los productos al inventario y eliminará el registro de la venta.`)) {
+    return;
+  }
+
+  // 1. Obtener la venta específica desde Supabase para conocer sus ítems
+  const { data: ventaData, error: fetchError } = await supabaseClient
+    .from('sales')
+    .select('*')
+    .eq('id', ventaId)
+    .single();
+
+  if (fetchError || !ventaData) {
+    alert("❌ No se pudo encontrar la información de la venta.");
+    return;
+  }
+
+  let itemsArray = ventaData.items;
+  if (typeof itemsArray === 'string') {
+    try { itemsArray = JSON.parse(itemsArray); } catch (e) { itemsArray = []; }
+  }
+
+  // 2. Devolver el stock a cada producto en la base de datos
+  if (Array.isArray(itemsArray)) {
+    for (const item of itemsArray) {
+      const prodId = item.id;
+      const cantidadDevuelta = Number(item.quantity || item.cantidad || 1);
+
+      // Consultar el stock actual del producto
+      const { data: prodData, error: prodError } = await supabaseClient
+        .from('products')
+        .select('stock')
+        .eq('id', prodId)
+        .single();
+
+      if (!prodError && prodData) {
+        const stockActual = Number(prodData.stock || 0);
+        const nuevoStock = stockActual + cantidadDevuelta;
+
+        // Actualizar con el stock sumado
+        await supabaseClient
+          .from('products')
+          .update({ stock: nuevoStock })
+          .eq('id', prodId);
+      }
+    }
+  }
+
+  // 3. Eliminar el registro de la venta de la tabla 'sales'
+  const { error: deleteError } = await supabaseClient
+    .from('sales')
+    .delete()
+    .eq('id', ventaId);
+
+  if (deleteError) {
+    alert("⚠️ Hubo un error al eliminar la venta de la base de datos.");
+  } else {
+    alert(`✅ ¡Devolución de la venta #${ventaId} procesada con éxito!\nEl inventario ha sido restaurado.`);
+    
+    // 4. Refrescar la pantalla de inventario e historial
+    await loadProductsFromSupabase();
+    await cargarHistorialVentas();
+  }
+};
+
+// ==========================================
+// FUNCIONES ADICIONALES (PRODUCTO MANUAL Y CORTE / NUEVO DÍA)
+// ==========================================
+
+// 1. Abrir modal para agregar un ítem o producto personalizado/libre
+window.openCustomItemModal = function() {
+  const nombre = prompt("Nombre del producto o servicio libre:");
+  if (!nombre || nombre.trim() === "") return;
+
+  const precioInput = prompt(`Precio para "${nombre}":`, "0.00");
+  const precio = parseFloat(precioInput);
+
+  if (isNaN(precio) || precio <= 0) {
+    alert("Precio no válido.");
+    return;
+  }
+
+  // Agregarlo directamente al carrito como un ítem temporal
+  cart.push({
+    id: 'custom_' + Date.now(),
+    name: nombre.trim(),
+    price: precio,
+    stock: 9999, // Stock ilimitado para ítems libres
+    quantity: 1
+  });
+
+  saveCartState();
+  renderCart();
+};
+
+// 2. Iniciar nuevo día / corte de caja básico
+window.startNewDay = function() {
+  if (confirm("⚠️ ¿Estás seguro de iniciar un nuevo día?\nEsto limpiará las ventas registradas o reiniciará el corte actual.")) {
+    // Si manejas cortes locales, puedes limpiar o reiniciar aquí
+    localStorage.removeItem('pos_sales');
+    alert("✅ ¡Caja reiniciada para el nuevo día!");
+    if (typeof cargarHistorialVentas === 'function') {
+      cargarHistorialVentas();
+    }
+  }
+};
+
+// ==========================================
+// MÓDULO DE CORTE DE CAJA / INGRESOS
+// ==========================================
+async function updateCashCutView() {
+  const efectivoEl = document.getElementById('cash-sales-total');
+  const tarjetaEl = document.getElementById('digital-sales-total');
+  const totalEl = document.getElementById('overall-sales-total');
+
+  // Consultar todas las ventas desde Supabase
+  const { data: ventas, error } = await supabaseClient
+    .from('sales')
+    .select('*');
+
+  if (error) {
+    console.error("Error al obtener ventas para el corte de caja:", error);
+    return;
+  }
+
+  let totalEfectivo = 0;
+  let totalTarjeta = 0;
+
+  if (ventas && ventas.length > 0) {
+    ventas.forEach(venta => {
+      const monto = Number(venta.total || 0);
+      const metodo = (venta.payment_method || 'cash').toLowerCase();
+
+      // Clasificar según el método de pago registrado
+      if (metodo.includes('efectivo') || metodo === 'cash') {
+        totalEfectivo += monto;
+      } else {
+        totalTarjeta += monto;
+      }
+    });
+  }
+
+  const totalGeneral = totalEfectivo + totalTarjeta;
+
+  // Actualizar los textos en pantalla usando los IDs correctos de tu HTML
+  if (efectivoEl) efectivoEl.innerText = `Q ${totalEfectivo.toFixed(2)}`;
+  if (tarjetaEl) tarjetaEl.innerText = `Q ${totalTarjeta.toFixed(2)}`;
+  if (totalEl) totalEl.innerText = `Q ${totalGeneral.toFixed(2)}`;
+}
+
+// ==========================================
+// REINICIAR Y GUARDAR CIERRE (NUEVO DÍA)
+// ==========================================
+window.startNewDay = async function() {
+  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales de la vista activa y dejará el corte en cero. (Asegúrate de haber impreso tu reporte antes).")) {
+    return;
+  }
+
+  try {
+    // Opción A: Si quieres eliminar físicamente las ventas de la tabla 'sales' para iniciar completamente en blanco:
+    // (Opcional: Si prefieres moverlas a un historial de cierres, requeriría otra tabla, pero lo habitual para limpiar el día es esto)
+    
+    // 1. Obtener todas las ventas actuales
+    const { data: ventasActuales, error: fetchError } = await supabaseClient
+      .from('sales')
+      .select('id');
+
+    if (fetchError) {
+      alert("❌ Error al consultar las ventas para el corte.");
+      return;
+    }
+
+    if (!ventasActuales || ventasActuales.length === 0) {
+      alert("ℹ️ No hay ventas registradas para limpiar en este momento.");
+      return;
+    }
+
+    // 2. Eliminar los registros de la tabla sales de Supabase para vaciar el día
+    // (Nota: Si prefieres archivarlas, luego podemos crear una tabla de 'cierres_caja')
+    for (const venta of ventasActuales) {
+      await supabaseClient
+        .from('sales')
+        .delete()
+        .eq('id', venta.id);
+    }
+
+    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 para el nuevo día.");
+
+    // 3. Actualizar la vista de la caja y el historial en pantalla
+    if (typeof updateCashCutView === 'function') {
+      await updateCashCutView();
+    }
+    if (typeof cargarHistorialVentas === 'function') {
+      await cargarHistorialVentas();
+    }
+
+  } catch (err) {
+    console.error("Error en startNewDay:", err);
+    alert("⚠️ Hubo un error al procesar el cierre de caja.");
   }
 };
