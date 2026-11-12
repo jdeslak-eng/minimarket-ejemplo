@@ -8,17 +8,17 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Iconos -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Supabase JS Client CDN (Oficial para la nube) -->
+  <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Tu archivo CSS separado -->
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
-<body class="pos-body">
+<body class="pos-body bg-stone-100 min-h-screen flex flex-col">
 
   <!-- Pantalla de Inicio de Sesión (Supabase Auth) -->
   <div id="login-container" class="fixed inset-0 bg-stone-900 z-50 flex items-center justify-center p-4" style="display: none;">
-    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 border border-stone-200">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 border border-stone-200">
       <div class="text-center mb-6">
         <h1 class="text-2xl font-extrabold text-stone-900">Minimarket POS</h1>
         <p class="text-xs text-stone-500 mt-1">Ingresa tus credenciales para acceder al sistema</p>
@@ -42,98 +42,102 @@
     </div>
   </div>
 
-  <!-- Header / Navegación principal -->
-  <header class="pos-header no-print">
-    <div class="pos-brand-container">
-      <div class="pos-logo">M</div>
+  <!-- Header / Navegación principal adaptada para móviles -->
+  <header class="pos-header no-print flex flex-col md:flex-row justify-between items-center gap-3 p-3 sm:p-4 bg-white border-b border-stone-200 shadow-sm">
+    <div class="pos-brand-container flex items-center gap-2">
+      <div class="pos-logo w-9 h-9 rounded-xl bg-stone-900 text-white flex items-center justify-center font-bold">M</div>
       <div>
-        <h1 class="pos-title">minimarket</h1>
-        <p class="pos-subtitle">Punto de Venta</p>
+        <h1 class="pos-title font-bold text-sm sm:text-base text-stone-900 leading-tight">minimarket</h1>
+        <p class="pos-subtitle text-[10px] text-stone-500">Punto de Venta</p>
       </div>
     </div>
     
-    <div class="pos-nav">
-      <button id="btn-pos" onclick="switchTab('pos')" class="nav-btn active"><i class="fa-solid fa-cash-register mr-1.5"></i> VENTA</button>
-      <button id="btn-inventory" onclick="switchTab('inventory')" class="nav-btn"><i class="fa-solid fa-boxes-stacked mr-1.5"></i> INVENTARIO</button>
-      <button id="btn-sales" onclick="switchTab('sales')" class="nav-btn"><i class="fa-solid fa-receipt mr-1.5"></i> HISTORIAL</button>
-      <button id="btn-cash" onclick="switchTab('cash')" class="nav-btn"><i class="fa-solid fa-vault mr-1.5"></i> CORTE DE CAJA</button>
+    <!-- Botones de navegación adaptados (muestran icono en móvil y texto completo en tablets/laptops) -->
+    <div class="pos-nav flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
+      <button id="btn-pos" onclick="switchTab('pos')" class="nav-btn active px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-cash-register"></i> <span class="hidden sm:inline">VENTA</span></button>
+      <button id="btn-inventory" onclick="switchTab('inventory')" class="nav-btn px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-boxes-stacked"></i> <span class="hidden sm:inline">INVENTARIO</span></button>
+      <button id="btn-sales" onclick="switchTab('sales')" class="nav-btn px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-receipt"></i> <span class="hidden sm:inline">HISTORIAL</span></button>
+      <button id="btn-cash" onclick="switchTab('cash')" class="nav-btn px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-vault"></i> <span class="hidden sm:inline">CORTE</span></button>
     </div>
   </header>
 
-  <!-- Vista 1: POS (Punto de Venta) -->
-  <main id="view-pos" class="pos-main">
-    <section class="catalog-section">
-      <div class="catalog-top-bar">
-        <div class="search-box">
-          <i class="fa-solid fa-magnifying-glass search-icon"></i>
-          <input type="text" id="search-input" onkeyup="filterProducts()" placeholder="Buscar producto o escanear..." class="search-input">
+  <!-- Vista 1: POS (Punto de Venta) - Adaptado a columnas flexibles para celular y escritorio -->
+  <main id="view-pos" class="pos-main flex flex-col lg:flex-row flex-1 overflow-hidden">
+    <section class="catalog-section flex-1 flex flex-col p-3 sm:p-4 overflow-hidden">
+      <div class="catalog-top-bar flex flex-col sm:flex-row gap-2 mb-3">
+        <div class="search-box relative flex-1">
+          <i class="fa-solid fa-magnifying-glass search-icon absolute left-3.5 top-3 text-stone-400"></i>
+          <input type="text" id="search-input" onkeyup="filterProducts()" placeholder="Buscar producto o escanear..." class="search-input w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 text-xs sm:text-sm focus:outline-none focus:border-stone-900 bg-white">
         </div>
-        <button onclick="openCustomItemModal()" class="custom-item-btn"><i class="fa-solid fa-plus mr-1.5"></i> Monto Libre</button>
+        <button onclick="openCustomItemModal()" class="custom-item-btn bg-stone-800 hover:bg-stone-900 text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+          <i class="fa-solid fa-plus"></i> Monto Libre
+        </button>
       </div>
 
-      <div class="categories-scroll scrollbar-none" id="categories-container"></div>
-      <div id="products-grid" class="products-grid"></div>
+      <div class="categories-scroll scrollbar-none flex gap-2 overflow-x-auto pb-2 mb-2" id="categories-container"></div>
+      
+      <!-- Cuadrícula de productos responsiva (2 col en móvil, 3 en tablet, 4 en PC) -->
+      <div id="products-grid" class="products-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 overflow-y-auto flex-1 pr-1"></div>
     </section>
 
-    <!-- Carrito lateral -->
-    <section class="cart-section">
-      <div class="cart-header">
-        <h2><i class="fa-solid fa-shopping-bag mr-2"></i> Carrito Actual</h2>
-        <button onclick="clearCart()" class="cart-clear-btn"><i class="fa-regular fa-trash-can mr-1"></i> Vaciar</button>
+    <!-- Carrito lateral / inferior adaptativo -->
+    <section class="cart-section w-full lg:w-96 bg-white border-t lg:border-t-0 lg:border-l border-stone-200 flex flex-col p-4 shadow-lg lg:shadow-none">
+      <div class="cart-header flex justify-between items-center mb-3">
+        <h2 class="font-bold text-sm text-stone-800"><i class="fa-solid fa-shopping-bag mr-2"></i> Carrito Actual</h2>
+        <button onclick="clearCart()" class="cart-clear-btn text-rose-500 hover:text-rose-700 text-xs font-semibold flex items-center gap-1"><i class="fa-regular fa-trash-can"></i> Vaciar</button>
       </div>
 
-      <div id="cart-items" class="cart-items-container"></div>
+      <div id="cart-items" class="cart-items-container flex-1 overflow-y-auto pr-1 max-h-48 lg:max-h-none"></div>
 
-      <div class="cart-footer">
-        <div class="cart-summary-text">
+      <div class="cart-footer pt-3 border-t border-stone-200 mt-2">
+        <div class="cart-summary-text text-xs space-y-1 mb-3 text-stone-600">
           <div class="flex justify-between">
             <span>Subtotal</span>
             <span id="cart-subtotal">Q 0.00</span>
           </div>
           <div class="flex justify-between">
-              <span>Impuestos (%)</span>
+            <span>Impuestos (%)</span>
             <span>Q 0.00</span>
           </div>
         </div>
 
-        <div class="cart-total-row">
+        <div class="cart-total-row flex justify-between items-center text-sm sm:text-base font-extrabold text-stone-900 mb-3">
           <span>Total</span>
           <span id="cart-total">Q 0.00</span>
         </div>
 
-        <button onclick="openPaymentModal()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
-  <i class="fa-solid fa-cash-register"></i>
-  <span>Cobrar</span>
-</button>
-
+        <button onclick="openPaymentModal()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm">
+          <i class="fa-solid fa-cash-register"></i>
+          <span>Cobrar</span>
+        </button>
       </div>
     </section>
   </main>
 
   <!-- Vista 2: Inventario -->
-  <main id="view-inventory" class="view-container hidden">
-    <div class="view-content-wrapper">
-      <div class="flex justify-between items-center">
+  <main id="view-inventory" class="view-container hidden flex-1 p-4 overflow-y-auto">
+    <div class="view-content-wrapper max-w-6xl mx-auto w-full space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 class="text-xl font-bold text-stone-900">Gestión de Inventario</h2>
           <p class="text-xs text-stone-500">Control de productos en la nube y stock</p>
         </div>
-        <div class="flex gap-2">
-          <button onclick="openProductModal()" class="action-btn-dark">
-            <i class="fa-solid fa-plus mr-1.5"></i> Nuevo Producto
-          </button>
-        </div>
+        <button onclick="openProductModal()" class="action-btn-dark bg-stone-900 hover:bg-stone-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-plus"></i> Nuevo Producto
+        </button>
       </div>
 
-      <div class="table-card">
-        <table class="pos-table">
+      <!-- Contenedor con scroll horizontal para tablas en celulares -->
+      <div class="table-card bg-white rounded-2xl shadow-sm border border-stone-200 overflow-x-auto">
+        <table class="pos-table w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
-            <tr>
-              <th>Producto</th>
-              <th>Categoría</th>
-              <th>Precio</th>
-              <th>Stock</th>
-              <th class="text-right">Código de Barras</th>
+            <tr class="border-b border-stone-200 text-stone-500 bg-stone-50">
+              <th class="p-3">Producto</th>
+              <th class="p-3">Categoría</th>
+              <th class="p-3">Precio</th>
+              <th class="p-3">Stock</th>
+              <th class="p-3 text-right">Código de Barras</th>
+              <th class="p-3 text-right pr-4">Acciones</th>
             </tr>
           </thead>
           <tbody id="inventory-table-body"></tbody>
@@ -143,29 +147,31 @@
   </main>
 
   <!-- Vista 3: Historial -->
-  <main id="view-sales" class="view-container hidden">
-    <div class="view-content-wrapper">
-      <div class="flex justify-between items-center">
+  <main id="view-sales" class="view-container hidden flex-1 p-4 overflow-y-auto">
+    <div class="view-content-wrapper max-w-6xl mx-auto w-full space-y-4">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 class="text-xl font-bold text-stone-900">Historial de Ventas</h2>
           <p class="text-xs text-stone-500">Registro de transacciones</p>
         </div>
-        <div class="sales-total-card">
-          <span class="sales-total-label">Total Acumulado</span>
+        <div class="sales-total-card bg-white px-4 py-2.5 rounded-xl border border-stone-200 shadow-sm flex flex-col">
+          <span class="sales-total-label text-[10px] text-stone-500 font-semibold uppercase">Total Acumulado</span>
           <span id="sales-total-day" class="text-base font-extrabold text-stone-900">Q 0.00</span>
         </div>
       </div>
 
-      <div class="table-card">
-        <table class="pos-table">
+      <!-- Contenedor con scroll horizontal para tablas en celulares -->
+      <div class="table-card bg-white rounded-2xl shadow-sm border border-stone-200 overflow-x-auto">
+        <table class="pos-table w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
-            <tr>
-              <th>ID Venta</th>
-              <th>Hora</th>
-              <th>Método</th>
-              <th>Ítems</th>
-              <th class="text-right">Total</th>
-              <th class="text-right pr-4">Acción</th>
+            <tr class="border-b border-stone-200 text-stone-500 bg-stone-50">
+              <th class="p-3">ID Venta</th>
+              <th class="p-3">Hora</th>
+              <th class="p-3">Cajero</th>
+              <th class="p-3">Método</th>
+              <th class="p-3">Ítems</th>
+              <th class="p-3 text-right">Total</th>
+              <th class="p-3 text-right pr-4">Acción</th>
             </tr>
           </thead>
           <tbody id="sales-table-body"></tbody>
@@ -175,30 +181,30 @@
   </main>
 
   <!-- Vista 4: Corte de Caja -->
-  <main id="view-cash" class="view-container hidden">
-    <div class="view-content-wrapper max-w-4xl">
-      <div class="flex justify-between items-center">
+  <main id="view-cash" class="view-container hidden flex-1 p-4 overflow-y-auto">
+    <div class="view-content-wrapper max-w-4xl mx-auto w-full space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 class="text-xl font-bold text-stone-900">Corte de Caja Diario</h2>
           <p class="text-xs text-stone-500">Arqueo de efectivo e ingresos</p>
         </div>
-        <div class="flex gap-2 no-print">
-          <button onclick="startNewDay()" class="action-btn-rose"><i class="fa-solid fa-rotate-right mr-1.5"></i>Reiniciar y Guardar Cierre</button>
-          <button onclick="window.print()" class="action-btn-dark"><i class="fa-solid fa-print mr-1.5"></i> Imprimir Reporte</button>
+        <div class="flex flex-wrap gap-2 no-print w-full sm:w-auto">
+          <button onclick="startNewDay()" class="action-btn-rose flex-1 sm:flex-none bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-rotate-right"></i> Reiniciar y Guardar Cierre</button>
+          <button onclick="window.print()" class="action-btn-dark flex-1 sm:flex-none bg-stone-800 hover:bg-stone-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-print"></i> Imprimir</button>
         </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="cash-stat-card">
-          <span class="cash-card-title">Ventas Efectivo</span>
+        <div class="cash-stat-card bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
+          <span class="cash-card-title text-xs text-stone-500 block mb-1">Ventas Efectivo</span>
           <span id="cash-sales-total" class="text-xl font-extrabold text-stone-900">Q 0.00</span>
         </div>
-        <div class="cash-stat-card">
-          <span class="cash-card-title">Tarjetas & Transf.</span>
+        <div class="cash-stat-card bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
+          <span class="cash-card-title text-xs text-stone-500 block mb-1">Tarjetas & Transf.</span>
           <span id="digital-sales-total" class="text-xl font-extrabold text-stone-900">Q 0.00</span>
         </div>
-        <div class="cash-stat-card dark">
-          <span class="cash-card-title dark">Total Ingresos</span>
+        <div class="cash-stat-card dark bg-stone-900 p-4 rounded-2xl shadow-md text-white">
+          <span class="cash-card-title dark text-xs text-stone-300 block mb-1">Total Ingresos</span>
           <span id="overall-sales-total" class="text-xl font-extrabold text-white">Q 0.00</span>
         </div>
       </div>
@@ -206,203 +212,150 @@
   </main>
 
   <!-- Modales Básicos -->
-  <div id="modal-custom" class="modal-overlay hidden no-print">
-    <div class="modal-card max-w-sm">
+  <div id="modal-custom" class="modal-overlay hidden no-print fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-4">
+    <div class="modal-card bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4">
       <h3 class="font-bold text-stone-900 text-base">Agregar Monto Libre</h3>
       <div class="space-y-3 text-xs">
         <div>
           <label class="font-medium text-stone-600 block mb-1">Descripción</label>
-          <input type="text" id="custom-name" value="Artículo Vario" class="pos-input">
+          <input type="text" id="custom-name" value="Artículo Vario" class="pos-input w-full p-2.5 border rounded-xl">
         </div>
         <div>
           <label class="font-medium text-stone-600 block mb-1">Precio (Q)</label>
-          <input type="number" step="0.01" id="custom-price" placeholder="0.00" class="pos-input font-bold">
+          <input type="number" step="0.01" id="custom-price" placeholder="0.00" class="pos-input font-bold w-full p-2.5 border rounded-xl">
         </div>
       </div>
       <div class="flex gap-2 pt-2">
-        <button onclick="closeCustomItemModal()" class="modal-btn-cancel">Cancelar</button>
-        <button onclick="addCustomItem()" class="modal-btn-confirm">Agregar</button>
+        <button onclick="closeCustomItemModal()" class="modal-btn-cancel flex-1 bg-stone-100 hover:bg-stone-200 py-2.5 rounded-xl font-semibold">Cancelar</button>
+        <button onclick="addCustomItem()" class="modal-btn-confirm flex-1 bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl font-semibold">Agregar</button>
       </div>
     </div>
   </div>
 
   <!-- Modal para Crear Nuevo Producto -->
-<div id="modal-product" class="modal-overlay hidden no-print">
-  <div class="modal-card max-w-md">
-    <div class="flex justify-between items-center border-b border-stone-100 pb-2">
-      <h3 class="font-bold text-stone-900 text-base">Nuevo Producto</h3>
-      <button onclick="closeProductModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    
-    <div class="space-y-3 text-xs">
-      <div>
-        <label class="font-medium text-stone-600 block mb-1">Nombre del Producto</label>
-        <input type="text" id="new-prod-name" placeholder="Ej. Leche Entera 1L" class="pos-input">
+  <div id="modal-product" class="modal-overlay hidden no-print fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-4">
+    <div class="modal-card bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-100 pb-2">
+        <h3 class="font-bold text-stone-900 text-base">Nuevo Producto</h3>
+        <button onclick="closeProductModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="grid grid-cols-2 gap-2">
+      
+      <div class="space-y-3 text-xs">
         <div>
-          <label class="font-medium text-stone-600 block mb-1">Categoría</label>
-          <input type="text" id="new-prod-category" placeholder="Ej. Lácteos" class="pos-input">
+          <label class="font-medium text-stone-600 block mb-1">Nombre del Producto</label>
+          <input type="text" id="new-prod-name" placeholder="Ej. Leche Entera 1L" class="pos-input w-full p-2.5 border rounded-xl">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="font-medium text-stone-600 block mb-1">Categoría</label>
+            <input type="text" id="new-prod-category" placeholder="Ej. Lácteos" class="pos-input w-full p-2.5 border rounded-xl">
+          </div>
+          <div>
+            <label class="font-medium text-stone-600 block mb-1">Precio (Q)</label>
+            <input type="number" step="0.01" id="new-prod-price" placeholder="0.00" class="pos-input w-full p-2.5 border rounded-xl">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="font-medium text-stone-600 block mb-1">Stock Inicial</label>
+            <input type="number" id="new-prod-stock" placeholder="10" class="pos-input w-full p-2.5 border rounded-xl">
+          </div>
+          <div>
+            <label class="font-medium text-stone-600 block mb-1">Código de Barras</label>
+            <input type="text" id="new-prod-barcode" placeholder="Escanea o escribe..." class="pos-input w-full p-2.5 border rounded-xl">
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeProductModal()" class="modal-btn-cancel flex-1 bg-stone-100 hover:bg-stone-200 py-2.5 rounded-xl font-semibold">Cancelar</button>
+        <button onclick="saveNewProduct()" class="modal-btn-confirm flex-1 bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl font-semibold">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Cobro / Pago -->
+  <div id="modal-payment" class="modal-overlay hidden no-print fixed inset-0 bg-stone-900/50 flex items-center justify-center z-50 p-4">
+    <div class="modal-card bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-100 pb-2 mb-1">
+        <h3 class="font-bold text-stone-900 text-base">Completar Cobro</h3>
+        <button onclick="closePaymentModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <div class="space-y-3 text-xs">
+        <div class="bg-stone-50 p-3 rounded-xl flex justify-between items-center">
+          <span class="text-stone-600 font-medium">Total a Pagar:</span>
+          <span id="modal-total-pay" class="text-lg font-bold text-emerald-600">Q0.00</span>
         </div>
         <div>
-          <label class="font-medium text-stone-600 block mb-1">Precio (Q)</label>
-          <input type="number" step="0.01" id="new-prod-price" placeholder="0.00" class="pos-input">
+          <label class="font-medium text-stone-600 block mb-1">Efectivo Recibido (Q)</label>
+          <input type="number" step="0.01" id="pay-amount-input" placeholder="0.00" class="pos-input w-full p-2.5 border rounded-xl text-base font-bold">
+        </div>
+        <div class="flex justify-between items-center pt-2">
+          <span class="text-stone-600 font-medium">Cambio / Vuelto:</span>
+          <span id="pay-change-text" class="text-sm font-bold text-blue-600">Q0.00</span>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-2">
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="closePaymentModal()" class="modal-btn-cancel flex-1 bg-stone-100 hover:bg-stone-200 py-2.5 rounded-xl font-semibold">Cancelar</button>
+        <button onclick="processSale()" class="modal-btn-confirm flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-semibold">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Edición de Producto -->
+  <div id="modal-edit" class="fixed inset-0 bg-stone-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-stone-100 space-y-4">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="text-lg font-bold text-stone-800">Editar Producto</h3>
+        <button onclick="closeEditModal()" class="text-stone-400 hover:text-stone-600 text-xl font-bold">×</button>
+      </div>
+      
+      <input type="hidden" id="edit-product-id">
+
+      <div class="space-y-3 text-xs">
         <div>
-          <label class="font-medium text-stone-600 block mb-1">Stock Inicial</label>
-          <input type="number" id="new-prod-stock" placeholder="10" class="pos-input">
+          <label class="block font-semibold text-stone-600 uppercase mb-1">Nombre del producto</label>
+          <input type="text" id="edit-name" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm">
         </div>
         <div>
-          <label class="font-medium text-stone-600 block mb-1">Código de Barras</label>
-          <input type="text" id="new-prod-barcode" placeholder="Escanea o escribe..." class="pos-input">
+          <label class="block font-semibold text-stone-600 uppercase mb-1">Categoría</label>
+          <input type="text" id="edit-category" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold text-stone-600 uppercase mb-1">Precio (Q)</label>
+          <input type="number" step="0.01" id="edit-price" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold text-stone-600 uppercase mb-1">Código de barras</label>
+          <input type="text" id="edit-barcode" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm">
         </div>
       </div>
-    </div>
 
-    <div class="flex gap-2 pt-2">
-      <button onclick="closeProductModal()" class="modal-btn-cancel">Cancelar</button>
-      <button onclick="saveNewProduct()" class="modal-btn-confirm">Guardar en Supabase</button>
+      <div class="flex gap-3 pt-2">
+        <button onclick="closeEditModal()" class="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-700 py-2.5 rounded-xl text-sm font-semibold transition">Cancelar</button>
+        <button onclick="saveEditedProduct()" class="flex-1 bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl text-sm font-semibold transition">Guardar</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Modal de Cobro / Pago -->
-<div id="modal-payment" class="modal-overlay hidden no-print">
-  <div class="modal-card max-w-sm">
-    <div class="flex justify-between items-center border-b border-stone-100 pb-2 mb-3">
-      <h3 class="font-bold text-stone-900 text-base">Completar Cobro</h3>
-      <button onclick="closePaymentModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    
-    <div class="space-y-3 text-xs mb-4">
-      <div class="bg-stone-50 p-3 rounded-xl flex justify-between items-center">
-        <span class="text-stone-600 font-medium">Total a Pagar:</span>
-        <span id="modal-total-pay" class="text-lg font-bold text-emerald-600">Q0.00</span>
+  <!-- Modal de Ticket de Venta -->
+  <div id="modal-ticket" class="fixed inset-0 bg-stone-900/50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl relative space-y-4">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-bold text-stone-900">Comprobante de Venta</h3>
+        <button onclick="closeTicketModal()" class="text-stone-400 hover:text-stone-600 text-lg"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div>
-        <label class="font-medium text-stone-600 block mb-1">Efectivo Recibido (Q)</label>
-        <input type="number" step="0.01" id="pay-amount-input" placeholder="0.00" class="pos-input text-base font-bold">
-      </div>
-      <div class="flex justify-between items-center pt-2">
-        <span class="text-stone-600 font-medium">Cambio / Vuelto:</span>
-        <span id="pay-change-text" class="text-sm font-bold text-blue-600">Q0.00</span>
-      </div>
-    </div>
 
-    <div class="flex gap-2">
-      <button onclick="closePaymentModal()" class="modal-btn-cancel">Cancelar</button>
-      <button onclick="processSale()" class="modal-btn-confirm">Confirmar Venta</button>
+      <div id="ticket-content" class="bg-stone-50 p-4 rounded-xl border border-stone-200 font-mono text-xs text-stone-800"></div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="window.print()" class="flex-1 bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"><i class="fa-solid fa-print"></i> Imprimir</button>
+        <button onclick="closeTicketModal()" class="flex-1 bg-stone-200 hover:bg-stone-300 text-stone-800 py-2.5 rounded-xl text-xs font-bold transition">Cerrar</button>
+      </div>
     </div>
   </div>
-</div>
-
-<!-- Modal de Edición de Producto -->
-<div id="modal-edit" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-stone-100 transform transition-all">
-    <div class="flex justify-between items-center mb-4">
-      <h3 class="text-lg font-bold text-stone-800">Editar Producto</h3>
-      <button onclick="closeEditModal()" class="text-stone-400 hover:text-stone-600 text-xl font-bold">×</button>
-    </div>
-    
-    <input type="hidden" id="edit-product-id">
-
-    <div class="space-y-4">
-      <div>
-        <label class="block text-xs font-semibold text-stone-600 uppercase mb-1">Nombre del producto</label>
-        <input type="text" id="edit-name" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-800">
-      </div>
-
-      <div>
-        <label class="block text-xs font-semibold text-stone-600 uppercase mb-1">Categoría</label>
-        <input type="text" id="edit-category" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-800">
-      </div>
-
-      <div>
-        <label class="block text-xs font-semibold text-stone-600 uppercase mb-1">Precio (Q)</label>
-        <input type="number" step="0.01" id="edit-price" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-800">
-      </div>
-
-      <div>
-        <label class="block text-xs font-semibold text-stone-600 uppercase mb-1">Código de barras</label>
-        <input type="text" id="edit-barcode" class="w-full border border-stone-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-800">
-      </div>
-    </div>
-
-    <div class="flex gap-3 mt-6">
-      <button onclick="closeEditModal()" class="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-700 py-2.5 rounded-xl text-sm font-semibold transition">
-        Cancelar
-      </button>
-      <button onclick="saveEditedProduct()" class="flex-1 bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl text-sm font-semibold transition">
-        Guardar Cambios
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal de Cobro / Pago -->
-<div id="modal-payment" class="modal-overlay hidden no-print">
-  <div class="modal-card max-w-sm">
-    <div class="flex justify-between items-center border-b border-stone-100 pb-2 mb-3">
-      <h3 class="font-bold text-stone-900 text-base">Completar Cobro</h3>
-      <button onclick="closePaymentModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    
-    <div class="space-y-3 text-xs mb-4">
-      <div class="bg-stone-50 p-3 rounded-xl flex justify-between items-center">
-        <span class="text-stone-600 font-medium">Total a Pagar:</span>
-        <span id="modal-total-pay" class="text-lg font-bold text-emerald-600">Q0.00</span>
-      </div>
-      <div>
-        <label class="font-medium text-stone-600 block mb-1">Efectivo Recibido (Q)</label>
-        <input type="number" step="0.01" id="pay-amount-input" placeholder="0.00" class="pos-input text-base font-bold">
-      </div>
-      <div class="flex justify-between items-center pt-2">
-        <span class="text-stone-600 font-medium">Cambio / Vuelto:</span>
-        <span id="pay-change-text" class="text-sm font-bold text-blue-600">Q0.00</span>
-      </div>
-    </div>
-
-    <div class="flex gap-2">
-      <button onclick="closePaymentModal()" class="modal-btn-cancel">Cancelar</button>
-      <button onclick="processSale()" class="modal-btn-confirm">Confirmar Venta</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal de Ticket de Venta -->
-<div id="modal-ticket" class="fixed inset-0 bg-stone-900/50 flex items-center justify-center hidden z-50 p-4">
-  <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl relative">
-    
-    <!-- Encabezado del Ticket -->
-    <div class="flex justify-between items-center mb-4 border-b pb-2">
-      <h3 class="font-bold text-stone-900">Comprobante de Venta</h3>
-      <button onclick="closeTicketModal()" class="text-stone-400 hover:text-stone-600 text-lg">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
-    </div>
-
-    <!-- ÁREA IMPRIMIBLE DEL TICKET -->
-    <div id="ticket-content" class="bg-stone-50 p-4 rounded-xl border border-stone-200 font-mono text-xs text-stone-800">
-      <!-- El contenido del ticket se genera dinámicamente desde JavaScript -->
-    </div>
-
-    <!-- Botones de Acción -->
-    <div class="flex gap-2 mt-5">
-      <button onclick="window.print()" class="flex-1 bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
-        <i class="fa-solid fa-print"></i> Imprimir
-      </button>
-      <button onclick="closeTicketModal()" class="flex-1 bg-stone-200 hover:bg-stone-300 text-stone-800 py-2.5 rounded-xl text-xs font-bold transition">
-        Cerrar
-      </button>
-    </div>
-
-  </div>
-</div>
-
-  </div>
-</div>
 
   <script src="app.js"></script>
 </body>
