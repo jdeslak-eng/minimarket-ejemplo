@@ -859,15 +859,46 @@ window.openCustomItemModal = function() {
   renderCart();
 };
 
-// 2. Iniciar nuevo día / corte de caja básico
-window.startNewDay = function() {
-  if (confirm("⚠️ ¿Estás seguro de iniciar un nuevo día?\nEsto limpiará las ventas registradas o reiniciará el corte actual.")) {
-    // Si manejas cortes locales, puedes limpiar o reiniciar aquí
-    localStorage.removeItem('pos_sales');
-    alert("✅ ¡Caja reiniciada para el nuevo día!");
-    if (typeof cargarHistorialVentas === 'function') {
-      cargarHistorialVentas();
+// ==========================================
+// REINICIAR Y GUARDAR CIERRE (NUEVO DÍA + CIERRE DE SESIÓN)
+// ==========================================
+window.startNewDay = async function() {
+  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión por seguridad.")) {
+    return;
+  }
+
+  try {
+    // 1. Obtener todas las ventas actuales de Supabase
+    const { data: ventasActuales, error: fetchError } = await supabaseClient
+      .from('sales')
+      .select('id');
+
+    if (fetchError) {
+      alert("❌ Error al consultar las ventas para el corte.");
+      return;
     }
+
+    if (ventasActuales && ventasActuales.length > 0) {
+      // 2. Eliminar los registros de la tabla sales para vaciar el día
+      for (const venta of ventasActuales) {
+        await supabaseClient
+          .from('sales')
+          .delete()
+          .eq('id', venta.id);
+      }
+    }
+
+    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión.");
+
+    // 3. Cerrar la sesión en Supabase para forzar el Login nuevamente
+    await supabaseClient.auth.signOut();
+
+    // 4. Recargar la página para que aparezca la pantalla de inicio de sesión obligatoria
+    location.reload();
+
+  } catch (err) {
+    console.error("Error en startNewDay:", err);
+    alert("⚠️ Hubo un error al procesar el cierre de caja.");
   }
 };
 
@@ -914,55 +945,45 @@ async function updateCashCutView() {
   if (totalEl) totalEl.innerText = `Q ${totalGeneral.toFixed(2)}`;
 }
 
-// ==========================================
-// REINICIAR Y GUARDAR CIERRE (NUEVO DÍA)
-// ==========================================
 window.startNewDay = async function() {
-  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales de la vista activa y dejará el corte en cero. (Asegúrate de haber impreso tu reporte antes).")) {
+  if (!confirm("⚠️ ¿Estás seguro de realizar el Corte de Caja y comenzar un NUEVO DÍA?\n\nEsto limpiará las ventas actuales, dejará el corte en cero y cerrará la sesión por seguridad.")) {
     return;
   }
 
   try {
-    // Opción A: Si quieres eliminar físicamente las ventas de la tabla 'sales' para iniciar completamente en blanco:
-    // (Opcional: Si prefieres moverlas a un historial de cierres, requeriría otra tabla, pero lo habitual para limpiar el día es esto)
-    
     // 1. Obtener todas las ventas actuales
     const { data: ventasActuales, error: fetchError } = await supabaseClient
       .from('sales')
       .select('id');
 
     if (fetchError) {
+      console.error("Error al consultar ventas:", fetchError);
       alert("❌ Error al consultar las ventas para el corte.");
       return;
     }
 
-    if (!ventasActuales || ventasActuales.length === 0) {
-      alert("ℹ️ No hay ventas registradas para limpiar en este momento.");
-      return;
+    // 2. Eliminar los registros de la tabla sales
+    if (ventasActuales && ventasActuales.length > 0) {
+      for (const venta of ventasActuales) {
+        await supabaseClient
+          .from('sales')
+          .delete()
+          .eq('id', venta.id);
+      }
     }
 
-    // 2. Eliminar los registros de la tabla sales de Supabase para vaciar el día
-    // (Nota: Si prefieres archivarlas, luego podemos crear una tabla de 'cierres_caja')
-    for (const venta of ventasActuales) {
-      await supabaseClient
-        .from('sales')
-        .delete()
-        .eq('id', venta.id);
-    }
-
-    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 para el nuevo día.");
-
-    // 3. Actualizar la vista de la caja y el historial en pantalla
-    if (typeof updateCashCutView === 'function') {
-      await updateCashCutView();
-    }
-    if (typeof cargarHistorialVentas === 'function') {
-      await cargarHistorialVentas();
-    }
+    alert("✅ ¡Corte de caja realizado con éxito! La caja se ha reiniciado a Q 0.00 y se cerrará la sesión.");
 
   } catch (err) {
     console.error("Error en startNewDay:", err);
-    alert("⚠️ Hubo un error al procesar el cierre de caja.");
+  } finally {
+    // 3. Cerrar sesión pase lo que pase y limpiar tokens locales
+    await supabaseClient.auth.signOut();
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // 4. Recargar forzosamente desde el servidor
+    window.location.reload(true);
   }
 };
 
