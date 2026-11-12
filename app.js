@@ -925,10 +925,71 @@ window.startNewDay = async function() {
   } catch (err) {
     console.error("Error en startNewDay:", err);
   } finally {
-    // Cierre global para desconectar todas las terminales que usen la misma cuenta
+    // 1. Cierre global en Supabase
     await supabaseClient.auth.signOut({ scope: 'global' });
+    
+    // 2. Limpiar todo rastro de almacenamiento local y de sesión
     localStorage.clear();
     sessionStorage.clear();
-    window.location.reload(true);
+    
+    // 3. Borrar de forma segura cualquier clave relacionada con Supabase almacenada
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('supabase')) {
+        localStorage.removeItem(key);
+      }
+    });
+    // Hacer lo mismo por si quedó algo en sessionStorage
+    Object.keys(sessionStorage).forEach(key => {
+      if (key.includes('supabase')) {
+        sessionStorage.removeItem(key);
+      }
+    });
+    
+    // 4. Recargar forzando la redirección limpia
+    window.location.href = window.location.pathname;
   }
+};
+
+// ==========================================
+// CONTROL DE AUTENTICACIÓN (LOGIN / LOGOUT)
+// ==========================================
+
+// 1. Comprobar sesión al cargar la página
+document.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const loginContainer = document.getElementById('login-container');
+  
+  if (!session) {
+    if (loginContainer) loginContainer.style.display = 'flex';
+  } else {
+    if (loginContainer) loginContainer.style.display = 'none';
+  }
+});
+
+// 2. Manejar el evento de inicio de sesión desde el formulario
+window.handleLogin = async function(event) {
+  event.preventDefault();
+  
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const errorDiv = document.getElementById('login-error');
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: password,
+  });
+
+  if (error) {
+    if (errorDiv) {
+      errorDiv.innerText = "⚠️ Correo o contraseña incorrectos.";
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
+
+  // Si el login es exitoso, ocultamos el modal de login y recargamos/inicializamos
+  const loginContainer = document.getElementById('login-container');
+  if (loginContainer) loginContainer.style.display = 'none';
+  
+  window.location.reload();
 };
